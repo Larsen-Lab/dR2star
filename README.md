@@ -1,9 +1,11 @@
 # dR2*
 ## Usage
-This repo provides a BIDS-app style wrapper (`dr2star`) around the `dr2star-core`
+This repo provides a BIDS-app style wrapper (`dR2star`) around `tat2`
 pipeline for running on fMRIPrep derivatives. The wrapper scans each
 `func/` directory, aggregates matching preprocessed BOLD runs, and
 writes one output per subject/session.
+
+`dR2star` is the wrapper CLI and `tat2` is the underlying processing binary.
 
 High-level flow:
  - point to an fMRIPrep derivatives folder
@@ -12,7 +14,7 @@ High-level flow:
 
 Example:
 ```
-dr2star /path/to/fmriprep /path/to/output participant \
+dR2star /path/to/fmriprep /path/to/output participant \
   --participant-label 01 02 \
   --ses-label V01 V02 V03
 ```
@@ -24,7 +26,7 @@ OUTPUT_DIR/sub-<label>/ses-<label>/anat/
 ```
 
 Each session produces:
- - `sub-*_ses-*_space-MNI152NLin6Asym_res-2_desc-dr2star_dr2starmap.nii.gz`
+ - `sub-*_ses-*_space-MNI152NLin6Asym_res-2_desc-dR2star_dR2starmap.nii.gz`
  - a JSON sidecar with the same basename
  - one or more censor files with matching basename
 
@@ -70,7 +72,7 @@ docker run --rm \
 
 Singularity/Apptainer pull:
 ```
-apptainer pull dr2star.sif docker://ghcr.io/larsen-lab/dr2star:latest
+apptainer pull dR2star.sif docker://ghcr.io/larsen-lab/dr2star:latest
 ```
 
 Singularity/Apptainer run:
@@ -78,7 +80,7 @@ Singularity/Apptainer run:
 apptainer run --cleanenv \
   -B /path/to/fmriprep:/input_dir \
   -B /path/to/output:/output_dir \
-  dr2star.sif \
+  dR2star.sif \
   /input_dir /output_dir participant
 ```
 
@@ -90,7 +92,7 @@ See tests in `t/`. Run with `make check`
 Extracted from [lncdtools](https://github.com/lncd/lncdtools) on 2026-01-08.
 ```
 git clone --branch dr2star-fmriprep --single-branch lncdtools dR2star
-find -iname '*dr2star*' -not -ipath '*.git/*' |
+find -iname '*dR2star*' -not -ipath '*.git/*' |
   sed 's:^./:--path :'|
   xargs uv tool run git-filter-repo --force \
     --path Makefile \

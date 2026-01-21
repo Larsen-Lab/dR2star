@@ -1,0 +1,700 @@
+#!/usr/bin/env bash
+# tat2: time-averaged T2*
+#  glue for 3dcalc 3dTcat and 3dTstat (+ 3dNotes)
+#  to compute time average T2
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# default values
+t2_inv=0                       # before volnorm (3dcalc, 3dTstat)
+MASK_REL="subject_mask.nii.gz" # 3dROIstats: use to calculate volnorm.1D
+MASK=""                        #  "
+MKMASK=0                       #  "
+volnorm_opt="-nzmedian"        # 3dcalc: run_tat2.nii.gz (vol normalized)
+SCALE=1000                     #  "
+vox_scale=1                    #  "
+use_zscore=0                   #  "
+use_ln=0                       #  "      (added 20240719)
+MAXVOLS=-1                     #  "      truncate how many volumes are in run_tat2.nii.gz
+censor_rel=""                  # 3dTcat: truncate input
+MAXVOLSTOTAL=-1                #  "      truncate how many volumes are ultimately averaged.
+IDX_SAMPLE_METHOD="first"      # how to sample indexes (first, last, random) when MAXVOLS*
+tnorm_opt="-nzmean"            # 3dTstat: final output  (time normalized)
+FD_THRES=${FD_THRES:-0.3}      # framewise displacement applied to confounds_timeseries.tsv
+
+# GNU Parallel default options for per func/ files (added for -fmriprep, 20260102)
+PARALEL_OPTS=${PARALEL_OPTS:-"--eta --progress --total-jobs -P50%"}
+
+OUTPUT=tat2star.nii.gz
+TMPLOCATION=/tmp
+CLEAN=1
+TMPD="" # will be folder specific to single invocation of tat2. removed at the end
+WRITE_JSON_LOG=1
+
+# run through fmriprep. -fmriprep option added 20260102
+FMRIPREP_DERIV_ROOT=""
+FMRIPREP_TASK_PATTERN=${FMRIPREP_TASK_PATTERN:-"*_task-*desc-preproc_bold.nii.gz"}
+
+# all the inputs (possibly globs) we want to work on
+declare -a GLOBFILES
+
+filedesc_whichvol=""
+
+TAT2_VER="1.0.0.20260102-fmriprep"
+# 1.0.0.20260102
+#   add -fmriprep option
+# 20240719-calc_ln+BUGFIX-no_vol
+#   novolume was 'x*1', fixed to be '(x/m)*m'
+# 20201116
+#  back to mean default
+# add
+#  across-TR median (instead of mean)
+#  whole brain normalization to mean (instead of sum)
+#  and whole brain z-score normalization instead
+
+##
+# initially from
+# https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0016093
+# author correspondence
+# > The normalization is within the brain for each time point.
+# > Not all voxels in the volume, but only those that belong to the brain mask.
+# > Then we normalize so that the sum of all brain voxels is some fixed number,
+# > e.g., 10000. The number doesn't really matter.
+# also see "Relative Concentration of Brain Iron (rcFe)"
+# https://www.biorxiv.org/content/biorxiv/early/2019/03/16/579763.full.pdf
+
+
+usage(){
+  cat <<-HEREDOC
+USAGE
+    tat2 '/paths/to/*/t2.nii.gz' [ -mask_rel $MASK_REL | -mask_rel s/_bold.nii.gz/_bold_mask.nii.gz/ | -mask /the/only/mask.nii.gz | -mkmask]  [-output $OUTPUT] [-scale $SCALE]  [-censor_rel relative/censor.1D | -censor_rel s/epi/censor/] [-median_time|-mean_time]  [-median_vol|-mean_vol|-no_vol] [-calc_zscore|-calc_ln] [-no_voxscale] [-inverse] [-noclean] [-verbose] [-tmp $TMPLOCATION]
+
+SYNOPSIS
+  calculates time averaged T2* like:
+     1) 3dROIstats > volnorm.1D
+        # tune with -{median,mean,no}_vol, and -mask, -mkmask, or -mask_rel
+     2) 3dcalc -x input_1  -m volnorm_1.1D -expr "(x/m)*SCALE/numvox #rep. f.ea. input
+        # tune with -no_voxscale, -scale, -calc_zscore, -calc_ln
+        # numvox derived from mask (but output not masked)
+     3) 3dTstat allnormed_concated.nii.gz
+        # tune with -{median,mean}_time
+  final '$OUTPUT' will be in the cwd
+
+OPTIONS (in order of relevance)
+  -fmriprep  /path/to/fmriprep/
+    Specify path to fmriprep root. Will run for all func directories within provided path
+
+    Will overwrite -censor_rel and -mask_rel options to new defaults.
+
+    To change new defaults, specify modifications after -fmriprep option
+    NB. without -fmriprep, tat2 creates a single file from all inputs
+        with -fmriprep, tat2start.nii.gz file PER func/ directory
+
+   GNU Parallel will be used when avalaible to parallelize.
+   Parameters set with environment variable
+      export PARALEL_OPTS='$PARALEL_OPTS'
+
+
+  -censor_rel FILE
+    specify the motion censor file. single column no header file. nLines = nVols. 0=exclude, 1=keep.
+    either a filename or regexp
+       as a filename in input nifti directory (resolves to \$(dirname \$input)/\$censor_rel)  OR
+       as a perl regexp run on \$input. like 's/(rest-\\d)_bold.nii.gz/\\1_cesnor.1d/'
+    despite switch's name, FILE also be an absolute path (start with '/')
+
+
+  -mask_rel    volnorm mask is relative to the input nifit (default: subject_mask.nii.gz)
+               like censor_rel, if given 's/find/replace/' perl regexp
+               will replace 'find' in the input.nii.gz with 'replace'
+  -mask        use mask to create volnorm.1D (-median_vol or -mean_vol)
+               default none, defer to mask_rel
+  -mkmask      ensures the number of voxels used to normalize is the same
+               across runs by create a coverage mask from all inputs
+               -nzmedian/nzmean and '-count -non-zero' could maybe get away with no mask,
+               but option is not provided
+
+
+  -maxvols NVOL
+     limit each run to NVOL volumes. run after and only after censor_rel.
+     useful when groups (e.g. young, old) have disproportonate censored volumes
+
+  -maxvolstotal NVOL
+     in final combined timeseries of all runs, take only the first NVOL volumes
+
+  -sample_method {first,last,random}
+     how to sample indexes when using maxvols/maxvolstotal. take first n, last n, or random n
+
+
+
+  -median_time or -mean_time
+        set how voxels are collapsed across time (3dTstat)
+        time norm default: '$tnorm_opt'
+        (history: mean until 20201117)
+
+  -median_vol or -mean_vol or -no_vol
+        set value used to scale across volume (each TR, 3dROIstats)
+        vol norm default: '$volnorm_opt'
+        (history: median [20210302],  mean [20201116], median [20201016]. no_vol added 20210921 but *x instead of *m. fixed 20240719)
+
+  -calc_zscore or -calc_log
+    for 3dcalc per volume voxelwise normalization:
+    instead of 'x/m'
+       -calc_zscore '(x-m)/s'
+       -calc_log    '-ln(x/m)'
+  -no_voxscale disables scaling. (SCALE=1, not normalized by number of nzvoxels)
+  -inverse     create 1/t2* and use as initial input
+
+  -noclean     keeps tmp folder around, useful for debugging
+  -tmp DIR     sets the directory to use for temporary calculations to DIR.
+               useful if forking enough jobs to overwhelm /tmp or using with -noclean
+REFS
+  https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0016093
+  https://www.biorxiv.org/content/biorxiv/early/2019/03/16/579763.full.pdf
+HEREDOC
+  exit 1
+}
+err() { echo -e "$@" >&2; exit 1; }
+msg() { echo -e "# [$(date)] $@"; }
+
+find_rel_file(){
+  local input="$1"; shift
+  local rel_str="$1"; shift
+  local rel_file="$(dirname "$input")/$rel_str"
+
+  # if given an absolute path. try that
+  [ ! -r "$rel_file" -a ${rel_str:0:1} == "/" ] &&
+     rel_file="$rel_str"
+
+  # try regexp pattern replace if rel_str looks like s/
+  [ ! -r "$rel_file" -a ${rel_str:0:2} == "s/" ] &&
+     rel_file="$(echo "$input" | perl -pe "$rel_str")"
+
+  # make sure we didn't just find the input file
+  if [ "$rel_file" == "$input" ]; then
+     err "ERR: relative file subsitition failed '$rel_file' matches inputfile! rel '$rel_str' for '$input'"
+  fi
+
+  # and make sure we actually found a file
+  if [ ! -r "$rel_file" ]; then
+     err "ERR: file '$rel_file' (from '$rel_str') DNE!"
+  fi
+
+  echo $rel_file
+}
+
+
+# pull out good index (censor=1 means keep). zero based
+where1csv(){ perl -lne 'push @i, $.-1 if /^\s?1/; END{print join ",", @i;}' "$@"; }
+firstn_csv() { perl -F, -slane 'print $n<=0?$_:(join ",", grep {!/^$/} @F[0..$n-1])' -- -n=$1; }
+idx_shuffle() {
+   local method="$1"; shift
+   local cmd
+   case "$method" in
+      first) cmd=cat;;
+      last) cmd=tac;;
+      random) cmd=shuf;;
+   esac
+  tr , '\n' | $cmd |tr '\n' ,|sed s/,$//
+}
+collapse_seq_idx(){
+   # for very large volumes, the argument list is too large!
+   # > ERROR: (The longest filename allowed in AFNI is 5095 characters)
+   perl -F, -slane '
+   BEGIN{
+     $p=-2;
+     @IDX=();
+     $n="";
+     sub ndot{ push(@IDX, "..@_") if @_[0];}
+   }
+   for $i (@F){
+      if($i==$p+1){
+         $n=$i;
+      } else{
+         ndot $n; $n="";
+      }
+      push(@IDX, $i) unless $n;
+      $p=$i;
+   }
+   END{
+     ndot($n);
+     $_=join(",",@IDX);
+     s/,(\.\.)/\1/g;
+     print
+  }'
+}
+
+parse_args(){
+   # keep args around for 3dNotes history
+   allargs="$*"    # single long string, into json/log
+   ALLARGS_=("$@") # used to forward tat2 when -fmriprep
+
+
+   # read in any arguments/paramaters
+   while [ $# -gt 0 ]; do
+    case $1 in
+     -mask)       MASK="$2"; shift 2;;
+     -mask_rel)   MASK_REL="$2"; shift 2;;
+     -output)     OUTPUT="$2"; shift 2;;
+     -scale)      SCALE="$2"; shift 2;;
+     -censor_rel) censor_rel="$2"; shift 2;;
+     -tmp)        TMPLOCATION="$2"; shift 2;;
+     -maxvols)    MAXVOLS="$2"; shift 2;;
+     -maxvolstotal) MAXVOLSTOTAL="$2"; shift 2;;
+     -sample_method) IDX_SAMPLE_METHOD=$2; shift 2;;
+     -mkmask)     MKMASK=1; MASK_REL=""; shift;;
+     -median_vol) volnorm_opt="-nzmedian"; shift;;
+     -mean_vol)   volnorm_opt="-nzmean"; shift;;
+     -no_vol)     volnorm_opt="none"; shift;;
+     -calc_zscore|-zscore_vol) use_zscore=1; shift;;
+     -calc_ln)     use_ln=1; shift;; # added 20240719
+     -mean_time)  tnorm_opt="-nzmean"; shift;;
+     -median_time)tnorm_opt="-nzmedian"; shift;;
+     -inverse)    t2_inv=1; shift;;
+     -no_voxscale)vox_scale=0; shift;;
+     -noclean)    CLEAN=0; shift;;
+     -fmriprep)  
+        FMRIPREP_DERIV_ROOT="${2:?expect fmriprep deriviate directory}"; shift 2
+        [[ "$MASK_REL" != "subject_mask.nii.gz" ]] &&
+           echo "WARNING: -mask_rel '$MASK_REL' defined before -fmriprep, overwriting" >&2 
+        MASK_REL='s/_desc-preproc_bold/_desc-brain_mask/'
+        [ -n "$censor_rel" ] &&
+           echo "WARNING: -censor_rel '$censor_rel' defined before -fmriprep, overwriting" >&2 
+        censor_rel='s/(task-[^_]+(_run-[^_]+)?)_.*/\1_desc-confounds_timeseries.tsv/'
+        ;;
+     -verbose)    set -x; shift;;
+     -h*)         usage;;
+     -*)          echo "unknown option '$1'"; usage;;
+     *)           GLOBFILES+=("$1"); shift;;
+    esac
+   done
+
+   return 0
+}
+
+args_are_sane(){
+   # help if nothing given
+   [ $# -eq 0 ] && usage
+   parse_args "$@"
+   ! [[ "$IDX_SAMPLE_METHOD" =~ first|last|random ]] &&
+      err "-sample_method must be first, last, or random; not '$IDX_SAMPLE_METHOD'"
+   [ "$IDX_SAMPLE_METHOD" != first -a $MAXVOLSTOTAL = -1 -a $MAXVOLS = -1 ] &&
+      err "'-sample_method $IDX_SAMPLE_METHOD' doesn't makes sense without -maxvols*"
+
+   local no_vol=0
+   [[ $volnorm_opt == "none" ]] && no_vol=1
+   if [[ "$use_zscore$use_ln$no_vol" =~ 1.*1 ]]; then
+      err "cannot combine -calc_zscore or -calc_ln or -no_vol"
+   fi
+   if [[ $use_zscore$use_ln =~ 1 && $vox_scale -eq 1 ]]; then
+      err "must use -no_voxscale with -calc_zscore or -calc_ln"
+   fi
+
+   # only check globs/inputs if not running as fmriprep
+   if [ -z "$FMRIPREP_DERIV_ROOT" ]; then
+      echo "#files/globs: ${#GLOBFILES[@]}"
+      # need to have at least one file to average
+      [ -z "${GLOBFILES[*]}" ] && usage
+
+      # how many files do we have
+      nfiles=$(find -L ${GLOBFILES[@]} -maxdepth 0 | wc -l)
+      [ $nfiles -eq 0 ] && err "no files match input GLOBFILESs: ${GLOBFILES[@]}"
+      [ $nfiles -eq 1 ] && echo "WARNING: only one file matches '${GLOBFILES[@]}'. expected all (>1) runs"
+      [ $nfiles -gt 10 ] && echo "WARNING: running on $nfiles epi files! Are you sure you don't want to run one visit at a time?"
+
+      [ -r "$OUTPUT" ] && echo "# have $OUTPUT; rm $OUTPUT # to redo" && exit 0
+   fi
+
+
+
+   [ "$MAXVOLS" == "1" ] && echo "-maxvols cannot be 1. 3dcalc doesn't like applying a single value 1D file to a 4D dataset" && exit 1
+   return 0
+}
+
+fmriprep_to_fd_censor(){
+   local tsvfile=${1:?expect framewise displacement file}
+   ! test -r $tsvfile &&
+      echo "ERROR: could not find expected file '$tsvfile'" >&2 &&
+      return 1
+
+   ! perl -slane 'BEGIN{
+      $i=-1;
+      @c=split/\t/,<>;
+      foreach (@c){
+         ++$i;
+         last if /framewise_displacement/;
+         exit 100 if $i >= $#c;
+      }}
+      print $F[$i]>$FD_THRES?0:1;' -- -FD_THRES="$FD_THRES" < $tsvfile &&
+         echo "ERROR: no 'framewise_displacement' in $tsvfile" >&2 &&
+         return 2
+   return 0
+}
+
+update_with_censor(){
+   declare -g input filedesc_whichvol censor_file
+   local tmpd=${1:-$TMPLOCATION} # only used if fmrirep/rewriting
+   filedesc_whichvol=""
+   readonly censor_rel
+   local idxs nkeep tat2inputfile
+   # update 'input' and 'runoutput'
+   # censor input
+   if [ -n "$censor_rel" ]; then
+      censor_file=$(find_rel_file "$input" "$censor_rel")
+      # SPECIAL CASE (20260102): fmriprep input is not 
+      if [[ $censor_file =~ desc-confounds_timeseries.tsv$ ]]; then
+         new_censor="$tmpd/$(basename $censor_file _timeseries.tsv)_fd-$FD_THRES.1D"
+         msg "apply fd<$FD_THRES from '$censor_file' to '$new_censor'"
+         test -r "$new_censor" && echo "WARNING: overwriting an existing censor file $new_censor" >&2
+         fmriprep_to_fd_censor "$censor_file" > $new_censor
+         censor_file=$new_censor
+      fi
+      # if MAXVOLS is default "-1", firstn_cvs does nothing
+      idxs=$(where1csv $censor_file| idx_shuffle $IDX_SAMPLE_METHOD | firstn_csv $MAXVOLS)
+      nkeep=$(echo $idxs| tr ',' '\n' |wc -l)
+      filedesc_whichvol=_keep-${nkeep}
+      msg "censor: using $nkeep/$(3dinfo -nt $input) timepoints. (last vol: ${idxs/*,}) [$censor_file]"
+      if [ $MAXVOLS -gt 0 ]; then
+         [ $nkeep -ne $MAXVOLS ]  &&
+            msg "WARNING:run$cnt: have $nkeep != maxvols ($MAXVOLS). censored more volumes than min required?!"
+         # nkeep next used for file names.
+         filedesc_whichvol=_lastidx-${idxs/*,/}
+      fi
+      # truncate input
+      # previous used 3dTcat to truncation. but 3dROIstats and 3dcalc understand '[$index]' notation
+      # so no need to make another (potentially large) file
+      tat2inputfile=$input
+      input="$input[$idxs]"
+
+      # > ** ERROR: (The longest filename allowed in AFNI is 5095 characters)
+      # NB will be weird (do nothing?) when IDX_SAMPLE_METHOD is not "first"
+      #
+      # should remove conditional (>5k) so if this caues a bug
+      #   it will show up everywhere and will be tested (?)
+      [ ${#input} -ge 5095 ] &&
+         input="$tat2inputfile[$(echo $idxs | collapse_seq_idx)]"
+   fi
+
+   return 0
+}
+
+args_to_3dcalc_expr(){
+   readonly use_zscore use_ln vox_scale volnorm_opt numvox
+   ## what does 3dcalc's expression look like
+   # default is x/m*$SCALE/$numvox
+   # 4 possibilities. product of
+   # '(x-m)/s' vs 'x/m' AND '$SCALE/$numvox' vs '1'
+   #  zscore   vs  not   *   vox_scale       vs  not
+   calc_expr="(x/m)"
+   calc_scale="$SCALE/$numvox"
+
+   if [ $use_zscore -eq 1 ]; then
+    #sd_input="-s $vol_sd" # handled elsehwere to avoid sideffects here
+    calc_expr="(x-m)/s"
+   elif [ $use_ln -eq 1 ]; then
+    calc_expr="-1*log(x/m)"
+   fi
+   [ $vox_scale -eq 0 ] && calc_scale="1"
+
+   # 20210921 - BL measure effect of volume normalization
+   # 20240719 - BUGFIX
+   #     1. had 'x*1' but want to undo x/m. is now (x/m)*m
+   #     2. did not respect scaling
+   #        now can do: x/m*m * scale/nvox (but thats a bad idea?)
+   [ $volnorm_opt == "none" ] && calc_scale="m*$calc_scale"
+
+
+   # normalize each voxel by the volume average or median
+   # scale by SCALE and number of good (within mask) voxels in the run
+   # sd_input is only non-empty when '-zscore'
+   # '$calc_expr*$calc_scale' defaults to (x/m)*$SCALE/$numvox
+   #     s.t.
+   #          v=(x/mean(x))*(1000/length(x))
+   #          sum(v) = 1000
+   echo "$calc_expr*$calc_scale"
+}
+
+one_ta(){
+   # GLOBALS:
+   #  MASK, MASK_REL, censor_rel, MAXVOLS,
+   #  t2_inv, volnorm_opt, use_zscore, SCALE, vox_scale, all_numvox
+   #
+   # makes $runoutput and $volnorm_1D
+   #  looks like ${cnt}_tat2.nii.gz or $tmpd/${cnt}_keep$n_tat2.nii.gz if censoring
+   local cnt="$1"; shift
+   local input="$1"; shift
+   local tmpd="$1"; shift
+   local ROIstats_cmd;
+
+   # 20231207 - getting bash quoting right is hard
+   ! [[ $input =~ .nii.gz$|.nii$|.HEAD$ ]] &&
+       err "4D EPI input file '$input' must end in nii, nii.gz, or HEAD
+   Do you have a bad glob for eg -censor_rel? try putting 'echo' in front of your command to debug"
+
+   [ -n "$MASK" ] && mask="$MASK" || mask=$(find_rel_file "$input" "$MASK_REL")
+   [ ! -f $mask ] && err "mask '$mask' DNE; add -mkmask to create"
+
+   local filedesc_volnorm=_volnorm-${volnorm_opt//[- ]/}
+
+   # change $input and $filedesc_whichvol if $cesnor_rel exist
+   censor_file="" # updated version of '$censor_rel' if used
+   update_with_censor "$tmpd"
+
+   # must match *_tat2.nii.gz to be picked up by 3dTstat at the end
+   runoutput="$tmpd/${cnt}${filedesc_whichvol}${filedesc_volnorm}_tat2.nii.gz"
+
+   # calc number of voxels
+   numvox=$(3dBrickStat -count -non-zero $mask|sed 's/[\t ]//g')
+
+   # verbose
+   msg "tat2: $input -> $runoutput"
+   volnorm_1D=$tmpd/${cnt}${filedesc_volnorm}.1D
+   vol_sd=$tmpd/${cnt}_sd.1D
+
+
+   # if we want 1/t2*, switch up input to that
+   if [ $t2_inv -eq 1 ]; then
+       inv_out="$tmpd/${cnt}_inv.nii.gz"
+       3dcalc -datum float -x $input -expr 1/x -prefix $inv_out
+       input="$inv_out"
+   fi
+
+   # calc sum of each volume. output is normalize value per TR
+   # as long as we want to do some volume normalization
+   if [ $volnorm_opt != "none" ]; then
+      ROIstats_cmd="3dROIstats -nomeanout $volnorm_opt -mask $mask -1Dformat '$input' > '$volnorm_1D';"
+      eval "$ROIstats_cmd"
+   else
+      ROIstats_cmd="# no vol norm cmd;"
+      # this is redundant with later calc_expr change. but here for constancy
+      perl -se 'print "1\n"x$nt' -- -nt=$(3dinfo -nt "$input") > "$volnorm_1D"
+   fi
+
+   # do the same for stddev (sigma) if zscoring
+   local calc_sd_input=""
+   if [ $use_zscore -eq 1 ]; then
+     local sd_cmd="3dROIstats -nomeanout -nzsigma -mask '$mask' -1Dformat '$input' > '$vol_sd';"
+     ROIstats_cmd="$ROIstats_cmd$sd_cmd"
+     eval "$sd_cmd"
+     calc_sd_input="-s $vol_sd"
+   fi
+
+   full_expr="$(args_to_3dcalc_expr)" # side-effect
+   calc_cmd="3dcalc \
+     -x $input \
+     -m $volnorm_1D \
+     $calc_sd_input \
+     -datum float -overwrite \
+     -expr '$full_expr'\
+     -prefix $runoutput;"
+   eval "$calc_cmd"
+
+   # for logging we store the total number of voxels used
+   # and the list of censor files
+   all_numvox="$all_numvox$numvox,"
+   all_censors="$all_censors\"$censor_file\","
+   all_roistats="$all_roistats$ROIstats_cmd"
+   all_calc_cmd="$all_calc_cmd$calc_cmd"
+}
+
+
+# make list of input arguments formated as json
+json_list(){
+   local list=$(paste -sd, <<<$(printf '"%s"\n' "$@"))
+   echo -n "[${list}]"
+}
+
+_tat2(){
+   # would see this message on arg check unless running w/-fmriprep
+   test -r "$OUTPUT" &&
+      msg "# have $OUTPUT. rm '$OUTPUT' # to redo" &&
+      return 0
+
+   TMPD=$(mktemp -d $TMPLOCATION/tat2star_XXXX)
+   cnt=0
+   volcount=0
+   all_numvox=""  # will be populated with each subjectmask (csv)
+   all_censors="" # appened list of all censor files used (csv)
+   all_roistats="" # all 3dROIStats volume normalization commands
+   all_calc_cmd="" # 3dcalc commands
+   local nvols_nocen=0
+
+   if [ $MKMASK -eq 1 ]; then
+         MASK="$TMPD/subj_mask.nii.gz"
+         coverage_mask $MASK "${GLOBFILES[@]}"
+   fi
+
+   for input in ${GLOBFILES[@]}; do
+      one_ta $cnt "$input" "$TMPD"
+      # now have e.g. 0_keep200_tat2.nii.gz
+      prev_cnt=$cnt
+      let ++cnt
+      # track total uncensored volume count
+      let nvols_nocen+=$(3dinfo -nt "$input")
+
+      # we can stop processing runs if we have enough
+      if [ $MAXVOLSTOTAL -gt 0 -a $IDX_SAMPLE_METHOD == "first" ]; then
+         this_run=$TMPD/${prev_cnt}_*tat2.nii.gz
+         n_vol_run=$(3dinfo -nt $this_run)
+         let volcount+=$n_vol_run
+         [ $volcount -lt $MAXVOLSTOTAL ] && continue
+         msg "have $volcount >= $MAXVOLSTOTAL and -sample_method $IDX_SAMPLE_METHOD. stopping at $cnt/$nfiles runs"
+         nfiles=$cnt
+         break
+      fi
+   done
+   actual_nfiles=$(ls $TMPD/*_tat2.nii.gz|wc -l)
+
+   [ $actual_nfiles -ne $nfiles ] && err "ERROR: create $actual_nfiles/$nfiles ($cnt iterations) in $TMPD"
+
+   msg "tat2star $OUTPUT"
+   # combine all the normalized runs if we need to
+   if [ $nfiles -gt 1 ]; then
+      3dTcat -overwrite -prefix $TMPD/tat2_all.nii.gz $TMPD/*_tat2.nii.gz
+      concated_file=$TMPD/tat2_all.nii.gz
+   else
+      concated_file=$TMPD/*_tat2.nii.gz
+   fi
+
+   # truncate them
+   # count is 1-indexed, indexing is 0-indexed
+   # what to do if too few. maybe should die
+   # instead use min and update MAXTOTAL to be current maxtotal
+   concat_nvol=$(3dinfo -nt $concated_file)
+   if [ $MAXVOLSTOTAL -gt 0 ]; then
+      use_vols0=$MAXVOLSTOTAL
+      concat_nvol0=$concat_nvol
+      # 0 index
+      let concat_nvol0--
+      let use_vols0--
+
+      if [ $concat_nvol0 -lt $use_vols0 ]; then
+         msg "WARNING: have fewer volumes than requested! $use_vols0 < $concat_nvol0; 0-idx"
+         MAXVOLSTOTAL=$concat_nvol
+         use_vols0=$concat_nvol0
+      fi
+      maxvolsubset="[0..$use_vols0]"
+      [ "$IDX_SAMPLE_METHOD" != first ] &&
+         maxvolsubset="[$(seq -s, 0 $concat_nvol0 |idx_shuffle $IDX_SAMPLE_METHOD | firstn_csv $MAXVOLSTOTAL)]"
+      msg "using $MAXVOLSTOTAL from $concat_nvol ($maxvolsubset)"
+   else
+      maxvolsubset=""
+      MAXVOLSTOTAL=$concat_nvol
+   fi
+
+   # time norm
+   local Tstat_cmd="3dTstat -prefix $OUTPUT -overwrite $tnorm_opt $concated_file$maxvolsubset"
+   eval "$Tstat_cmd"
+
+   ### HISTORY/PROVENANCE
+   # 1D create file provenance is not tracked and tmp files will be remove.
+   # put final tat2 file. also in log.json
+   3dNotes -h "$all_roistats" "$OUTPUT"
+
+   all_nts="$(3dinfo -nt $TMPD/*_tat2.nii.gz|tr '\n' ',')"
+
+   [ $vox_scale -eq 0 ] && scale_msg="SCALE=NA" || scale_msg="SCALE=$SCALE"
+
+   # use gitver (lncdtool) when on path and tat2 tracked in git repo (e.g. in development)
+   # otherwise use hardcoded TAT2_VER (e.g. copied just tat2/no repo; or using from system package)
+   gitver="$(gitver "$0"||:)"
+   [[ -z "$gitver" || "$gitver" =~ :NA$ ]] && gitver=$TAT2_VER
+
+   note_msg="$0 $allargs # $(pwd); $scale_msg, nvoxes=$all_numvox, censors=$all_censors; nt=$all_nts; vol:$volnorm_opt, time:$tnorm_opt; $MAXVOLSTOTAL/$concat_nvol/$nvols_nocen used/not-cen/total nvols; $cnt/${#GLOBFILES[@]} files; $gitver"
+   3dNotes -h "$note_msg" "$OUTPUT"
+
+   # computer-friendly output for parsing when running many option permutations
+   [ "${WRITE_JSON_LOG:-1}" -eq 1 ] &&
+     cat <<- HEREDOC > "${OUTPUT/.nii.gz/.log.json}"
+	{
+    "cmd": "$0 $(sed 's:\\:\\\\:g' <<< "$allargs")",
+	 "roistats_cmds": "${all_roistats}",
+	 "volume_norm_cmds": "${all_calc_cmd}",
+	 "collapse_cmd": "${Tstat_cmd}",
+	 "expr": "$full_expr",
+	 "volume_norm_3dROIstats": "${volnorm_opt//-/}",
+	 "time_norm_3dcalc": "${tnorm_opt//-/}",
+	 "ref_mask": "$mask",
+	 "nvox": [${all_numvox::-1}],`# -1 to remove trailing comma`
+	 "censor_files": [${all_censors::-1}],
+	 "nt": [${all_nts::-1}],
+	 "tat2_input": $(json_list $TMPD/*_tat2.nii.gz),
+	 "raw_inputs": $(json_list ${GLOBFILES[@]}),
+	 "n_raw_used": $cnt,
+	 "output": "$OUTPUT",
+	 "concat_nvol": $concat_nvol,
+	 "nvolx_nocen": $nvols_nocen,
+	 "scale": "$SCALE",
+	 "git": "$gitver",
+	 "tat2_ver": "$TAT2_VER",
+	 "use_inverse": "$t2_inv",
+	 "use_scale": "$vox_scale",
+	 "maxvols": $MAXVOLSTOTAL
+	}
+	HEREDOC
+
+   [ $CLEAN -eq 1 ] && \
+      rm -r "$TMPD" ||\
+      echo "find temporary files in '$TMPD'; remove '-noclean' if not testing"
+
+   return 0
+}
+
+_fmriprep_loop(){
+   # run all of fmripre func/ files
+   # 'deriv/sub-x/ses-y/func' or 'deriv/sub-x/func/'
+   mapfile -t bold_dirs < <(find "$FMRIPREP_DERIV_ROOT" -name 'func' -type d)
+   msg "found ${#bold_dirs[@]} 'func' folders (fmriprep sessions)"
+   [ ${#bold_dirs[@]} -eq 0 ] && 
+      err "No $FMRIPREP_DERIV_ROOT/**/func folders to work with!"
+
+   # ALLARGS_ includes two we want to remove: -fmriprep /path/to/deriv
+   noprepargs=(); i=0
+   while [ $i -lt ${#ALLARGS_[@]} ]; do
+      arg=${ALLARGS_[$i]}
+      [[ $arg == -fmriprep ]] && let i=i+2 && continue
+      noprepargs+=("$arg")
+      let ++i
+   done
+
+   if command -v env_parallel >/dev/null && [ -n "$PARALEL_OPTS" ]; then
+      export FMRIPREP_TASK_PATTERN FMRIPREP_DERIV_ROOT
+      export -f _tat2_fmriprep
+      parallel $PARALEL_OPTS -N1 _tat2_fmriprep {1} -censor_rel "'$censor_rel'" -mask_rel "'$MASK_REL'" "${noprepargs[@]}" ::: "${bold_dirs[@]}"
+   else
+      echo "WARNING: not parallelizing. install GNU Parallel to use mutliple cores." >&2
+      for session_func in "${bold_dirs[@]}"; do
+         msg "starting $session_func"
+         # continue across failures -- don't want one bad session to bring it all down
+         _tat2_fmriprep "$session_func" "${noprepargs[@]}" || :
+      done
+   fi
+}
+_tat2_fmriprep(){
+   # expect to be called by _fmriprep_loop after parse_args sets all bug GLOBFILES
+   local session_func=${1:?expect fmriprep func/ directory}; shift;
+   mapfile -t GLOBFILES < <(find $session_func -iname "$FMRIPREP_TASK_PATTERN" -not -iname '*echo-*')
+   [ ${#GLOBFILES[@]} -eq 0 ] &&
+      echo "WARNING: no non-echo task files in $session_func" >&2 &&
+      return 1
+
+   ! [[ ${GLOBFILES[0]} =~ sub-[^_/]+(_ses-[^_/]+)?_ ]] && 
+      echo "ERROR: no 'sub-*' in first input of $session_func: '${GLOBFILES[0]}'" &&
+      return 2
+
+   # TODO: option to save outside of fmrirep func dir
+   tat2 -output "$session_func/${BASH_REMATCH}desc-preproc_tat2star.nii.gz" "$@" ${GLOBFILES[@]}
+}
+
+# run if not sourced
+if ! [[ "$(caller)" != "0 "* ]]; then
+   set -eou pipefail
+   # 20210218WF - hygenic file usage -- tmp files after crash clog fileystem
+   trap '[ -n "$TMPD" -a -d "$TMPD" -a $CLEAN -eq 1 ] && [[ "$TMPD" =~ $TMPLOCATION ]] && rm -r "$TMPD"' EXIT
+   args_are_sane "$@"
+
+   # running on many at once!
+   if [ -n "$FMRIPREP_DERIV_ROOT" ]; then
+      _fmriprep_loop
+   else
+      _tat2
+   fi
+fi
