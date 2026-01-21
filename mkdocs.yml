@@ -1,0 +1,7 @@
+site_name: dR2star
+site_description: BIDS-app style wrapper around tat2 for fMRIPrep derivatives.
+theme:
+  name: readthedocs
+
+nav:
+  - Home: index.md
