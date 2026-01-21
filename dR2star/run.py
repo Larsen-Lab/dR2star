@@ -46,12 +46,6 @@ def build_cmd_template(
         cmd.append("-median_vol")
     elif args.volume_norm == "none":
         cmd.append("-no_vol")
-    if args.maxvols is not None:
-        cmd.extend(["-maxvols", str(args.maxvols)])
-    if args.maxvolstotal is not None:
-        cmd.extend(["-maxvolstotal", str(args.maxvolstotal)])
-    if args.sample_method:
-        cmd.extend(["-sample_method", args.sample_method])
     if args.tmp_dir:
         cmd.extend(["-tmp", args.tmp_dir])
     if args.noclean:

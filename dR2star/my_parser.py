@@ -153,27 +153,6 @@ def get_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--maxvols",
-        dest="maxvols",
-        metavar="N",
-        type=int,
-        help="Limit each run to N volumes after censoring (tat2 -maxvols).",
-    )
-    parser.add_argument(
-        "--maxvolstotal",
-        dest="maxvolstotal",
-        metavar="N",
-        type=int,
-        help="Limit total combined volumes to N (tat2 -maxvolstotal).",
-    )
-    parser.add_argument(
-        "--sample-method",
-        dest="sample_method",
-        metavar="METHOD",
-        choices=["first", "last", "random"],
-        help="Sampling method when using maxvols options (tat2 -sample_method).",
-    )
-    parser.add_argument(
         "--fd-thres",
         dest="fd_thres",
         metavar="THRESH",
