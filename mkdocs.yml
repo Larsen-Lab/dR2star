@@ -5,3 +5,10 @@ theme:
 
 nav:
   - Home: index.md
+  - Usage: usage.md
+
+plugins:
+  - search
+  - gen-files:
+      scripts:
+        - docs/gen_usage.py
