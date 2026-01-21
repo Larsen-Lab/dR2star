@@ -11,3 +11,5 @@ dR2star /path/to/fmriprep /path/to/output participant \
   --participant-label 01 02 \
   --ses-label V01 V02 V03
 ```
+
+See the Usage page for the full CLI help and options.
