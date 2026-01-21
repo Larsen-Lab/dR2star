@@ -595,7 +595,11 @@ _tat2(){
 
    # use gitver (lncdtool) when on path and tat2 tracked in git repo (e.g. in development)
    # otherwise use hardcoded TAT2_VER (e.g. copied just tat2/no repo; or using from system package)
-   gitver="$(gitver "$0"||:)"
+   if command -v gitver >/dev/null 2>&1; then
+      gitver="$(gitver "$0" 2>/dev/null || :)"
+   else
+      gitver=""
+   fi
    [[ -z "$gitver" || "$gitver" =~ :NA$ ]] && gitver=$TAT2_VER
 
    note_msg="$0 $allargs # $(pwd); $scale_msg, nvoxes=$all_numvox, censors=$all_censors; nt=$all_nts; vol:$volnorm_opt, time:$tnorm_opt; $MAXVOLSTOTAL/$concat_nvol/$nvols_nocen used/not-cen/total nvols; $cnt/${#GLOBFILES[@]} files; $gitver"
