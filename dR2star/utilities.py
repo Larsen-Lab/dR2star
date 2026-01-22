@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -176,9 +177,71 @@ def confounds_to_censor_file(
     return
 
 
-def concat_dR2star_vols(entities: list[str], anat_dir: Path) -> None:
-    """Placeholder for concatenating dR2star volumes."""
-    print(
-        "The concat_dR2star_vols function is not implemented yet. "
-        "Volumes will not be concatenated until implementation is finished."
-    )
+def concat_dR2star_vols(entities: list[str], anat_dir: Path) -> dict[str, list[str]]:
+    """Group dR2star volumes by removing selected BIDS entities from filenames."""
+    reduced_map: dict[str, list[str]] = {}
+    for path in sorted(anat_dir.glob("*dR2starmap.nii.gz")):
+        name = path.name
+        base = name[: -len(".nii.gz")]
+        reduced_base = base
+        for entity in entities:
+            reduced_base = re.sub(rf"_{re.escape(entity)}-[^_]+", "", reduced_base)
+        reduced_name = f"{reduced_base}.nii.gz"
+        reduced_map.setdefault(reduced_name, []).append(name)
+
+    for output_vol_name, input_vols in reduced_map.items():
+        if len(input_vols) == 1:
+            print(f"Only one volume found for the following grouping, skipping concatenation: {output_vol_name}")
+            continue
+        else:
+            print(f"Found {len(input_vols)} volumes to concatenate for {output_vol_name}")
+            print(f"Input volumes: {input_vols}")
+            print(f"Output volume (to be created): {output_vol_name}")
+
+            imgs = []
+            num_frames = np.zeros(len(input_vols), dtype=int)
+            for idx, vol_name in enumerate(input_vols):
+                vol_path = anat_dir / vol_name
+                import nibabel as nib
+
+                img = nib.load(str(vol_path))
+                imgs.append(img)
+                json_path = vol_path.replace(".nii.gz", ".json")
+                with open(json_path, "r") as f:
+                    metadata = json.load(f)
+                try:
+                    num_frames[idx] = metadata["concat_nvol"]
+                except KeyError:
+                    raise KeyError(
+                        f"Metadata key 'concat_nvol' not found in {json_path}"
+                    )
+            total_frames = np.sum(num_frames)
+            best_image = imgs[np.argmax(num_frames)]
+
+            if ('space-T1w' in output_vol_name) or ('space-T2w' in output_vol_name):
+                resampled_imgs = []
+                for temp_img in imgs:
+                    if temp_img == best_image:
+                        resampled_imgs.append(temp_img)
+                    else:
+                        resampled_imgs.append(nib.processing.resample_from_to(temp_img, best_image))
+                concat_data = np.zeros(best_image.shape)
+                total_frames = np.sum(num_frames)
+                for i, temp_img in enumerate(resampled_imgs):
+                    concat_data += temp_img.get_fdata()*num_frames[i]/total_frames
+                concat_img = nib.Nifti1Image(concat_data, best_image.affine, best_image.header)
+                output_path = anat_dir / output_vol_name
+                nib.save(concat_img, str(output_path))
+            elif ('space-MNI' in output_vol_name):
+                concat_data = np.zeros(best_image.shape)
+                total_frames = np.sum(num_frames)
+                for i, temp_img in enumerate(imgs):
+                    concat_data += temp_img.get_fdata()*num_frames[i]/total_frames
+                concat_img = nib.Nifti1Image(concat_data, best_image.affine, best_image.header)
+                output_path = anat_dir / output_vol_name
+                nib.save(concat_img, str(output_path))
+            else:
+                raise ValueError(f"Unexpected space entity in output volume name: {output_vol_name}")
+
+
+    return
