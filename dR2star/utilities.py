@@ -206,7 +206,7 @@ def concat_dR2star_vols(entities: list[str], anat_dir: Path) -> dict[str, list[s
 
                 img = nib.load(str(vol_path))
                 imgs.append(img)
-                json_path = vol_path.replace(".nii.gz", ".json")
+                json_path = Path(str(vol_path).replace(".nii.gz", ".json"))
                 with open(json_path, "r") as f:
                     metadata = json.load(f)
                 try:
