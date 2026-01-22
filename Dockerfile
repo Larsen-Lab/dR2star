@@ -28,6 +28,7 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
 
 RUN python3 -m pip install --no-cache-dir \
   numpy==1.26.4 \
+  scipy==1.11.4 \
   pandas==2.2.3 \
   nibabel==5.3.2
 
