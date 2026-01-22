@@ -177,7 +177,11 @@ def confounds_to_censor_file(
     return
 
 
-def concat_dR2star_vols(entities: list[str], anat_dir: Path) -> dict[str, list[str]]:
+def average_dR2star_vols(
+    entities: list[str],
+    anat_dir: Path,
+    output_dir: Path,
+) -> dict[str, list[str]]:
     """Group dR2star volumes by removing selected BIDS entities from filenames."""
     reduced_map: dict[str, list[str]] = {}
     for path in sorted(anat_dir.glob("*dR2starmap.nii.gz")):
@@ -194,10 +198,13 @@ def concat_dR2star_vols(entities: list[str], anat_dir: Path) -> dict[str, list[s
 
     for output_vol_name, input_vols in reduced_map.items():
         if len(input_vols) == 1:
-            print(f"Only one volume found for the following grouping, skipping concatenation: {output_vol_name}")
+            print(
+                "Only one volume found for the following grouping, "
+                f"skipping averaging: {output_vol_name}"
+            )
             continue
         else:
-            print(f"Found {len(input_vols)} volumes to concatenate for {output_vol_name}")
+            print(f"Found {len(input_vols)} volumes to average for {output_vol_name}")
             print(f"Input volumes: {input_vols}")
             print(f"Output volume (to be created): {output_vol_name}")
 
@@ -219,6 +226,12 @@ def concat_dR2star_vols(entities: list[str], anat_dir: Path) -> dict[str, list[s
                     )
             total_frames = np.sum(num_frames)
             best_image = imgs[np.argmax(num_frames)]
+            relative_weighting = (num_frames / total_frames).tolist()
+            source_data = []
+            for vol_name in input_vols:
+                vol_path = anat_dir / vol_name
+                bids_uri = str(vol_path).replace(str(output_dir), "bids::")
+                source_data.append(bids_uri)
 
             if ('space-T1w' in output_vol_name) or ('space-T2w' in output_vol_name):
                 resampled_imgs = []
@@ -245,5 +258,17 @@ def concat_dR2star_vols(entities: list[str], anat_dir: Path) -> dict[str, list[s
             else:
                 raise ValueError(f"Unexpected space entity in output volume name: {output_vol_name}")
 
+            json_path = Path(str(output_path).replace(".nii.gz", ".json"))
+            json_path.write_text(
+                json.dumps(
+                    {
+                        "source_data": source_data,
+                        "relative_weighting": relative_weighting,
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n"
+            )
 
     return

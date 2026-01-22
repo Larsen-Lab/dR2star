@@ -214,8 +214,8 @@ def main(argv: list[str] | None = None) -> int:
                         args.fd_thres,
                         args.dvars_thresh,
                     )
-            if args.concat:
-                utilities.concat_dR2star_vols(args.concat, output_anat_dir)
+            if args.average:
+                utilities.average_dR2star_vols(args.average, output_anat_dir, output_dir)
     return 0
 
 
