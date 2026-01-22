@@ -214,6 +214,8 @@ def main(argv: list[str] | None = None) -> int:
                         args.fd_thres,
                         args.dvars_thresh,
                     )
+            if args.concat:
+                utilities.concat_dR2star_vols(args.concat, output_anat_dir)
     return 0
 
 

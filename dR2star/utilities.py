@@ -174,3 +174,11 @@ def confounds_to_censor_file(
     np.savetxt(censor_output_path, censor, fmt="%d")
 
     return
+
+
+def concat_dR2star_vols(entities: list[str], anat_dir: Path) -> None:
+    """Placeholder for concatenating dR2star volumes."""
+    print(
+        "The concat_dR2star_vols function is not implemented yet. "
+        "Volumes will not be concatenated until implementation is finished."
+    )

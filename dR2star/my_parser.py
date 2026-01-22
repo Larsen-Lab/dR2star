@@ -114,6 +114,17 @@ def get_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--concat",
+        dest="concat",
+        metavar="ENTITY",
+        nargs="+",
+        choices=["acq", "rec", "dir", "run", "echo", "part", "ce"],
+        help=(
+            "Concatenate volumes across the selected BIDS entities "
+            "(acq, rec, dir, run, echo, part, ce)."
+        ),
+    )
+    parser.add_argument(
         "--scale",
         dest="scale",
         metavar="SCALE",
