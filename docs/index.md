@@ -13,3 +13,5 @@ dR2star /path/to/fmriprep /path/to/output participant \
 ```
 
 See the Usage page for the full CLI help and options.
+
+The `--concat` option can be used to request concatenation across selected BIDS entities.
