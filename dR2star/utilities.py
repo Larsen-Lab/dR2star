@@ -189,6 +189,9 @@ def concat_dR2star_vols(entities: list[str], anat_dir: Path) -> dict[str, list[s
         reduced_name = f"{reduced_base}.nii.gz"
         reduced_map.setdefault(reduced_name, []).append(name)
 
+    import nibabel as nib
+    from nibabel import processing
+
     for output_vol_name, input_vols in reduced_map.items():
         if len(input_vols) == 1:
             print(f"Only one volume found for the following grouping, skipping concatenation: {output_vol_name}")
@@ -202,7 +205,6 @@ def concat_dR2star_vols(entities: list[str], anat_dir: Path) -> dict[str, list[s
             num_frames = np.zeros(len(input_vols), dtype=int)
             for idx, vol_name in enumerate(input_vols):
                 vol_path = anat_dir / vol_name
-                import nibabel as nib
 
                 img = nib.load(str(vol_path))
                 imgs.append(img)
@@ -224,7 +226,7 @@ def concat_dR2star_vols(entities: list[str], anat_dir: Path) -> dict[str, list[s
                     if temp_img == best_image:
                         resampled_imgs.append(temp_img)
                     else:
-                        resampled_imgs.append(nib.processing.resample_from_to(temp_img, best_image))
+                        resampled_imgs.append(processing.resample_from_to(temp_img, best_image))
                 concat_data = np.zeros(best_image.shape)
                 total_frames = np.sum(num_frames)
                 for i, temp_img in enumerate(resampled_imgs):
