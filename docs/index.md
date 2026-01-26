@@ -12,6 +12,6 @@ dR2star /path/to/fmriprep /path/to/output participant \
   --ses-label V01 V02 V03
 ```
 
-See the Usage page for the full CLI help and options.
+See the [Usage](usage.md) page for the full CLI help and options.
 
 The `--concat` option can be used to request concatenation across selected BIDS entities.
