@@ -43,7 +43,6 @@ def get_parser() -> argparse.ArgumentParser:
         metavar="INPUT_DIR",
         help=(
             "Path to fmriprep derivatives (input directory). "
-            "This is passed to tat2 using -fmriprep."
         ),
     )
     parser.add_argument(
