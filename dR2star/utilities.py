@@ -234,6 +234,21 @@ def average_dR2star_vols(
                 source_data.append(bids_uri)
 
             if ('space-T1w' in output_vol_name) or ('space-T2w' in output_vol_name):
+                best_zooms = np.array(best_image.header.get_zooms()[:3])
+                voxel_mismatch = []
+                for vol_name, temp_img in zip(input_vols, imgs):
+                    temp_zooms = np.array(temp_img.header.get_zooms()[:3])
+                    if not np.allclose(temp_zooms, best_zooms):
+                        voxel_mismatch.append((vol_name, temp_zooms))
+                if voxel_mismatch:
+                    print(
+                        "WARNING: resampling volumes with differing voxel sizes; "
+                        f"using reference zooms {best_zooms.tolist()} for {output_vol_name}."
+                    )
+                    for vol_name, temp_zooms in voxel_mismatch:
+                        print(
+                            f"  - {vol_name}: zooms={temp_zooms.tolist()}"
+                        )
                 resampled_imgs = []
                 for temp_img in imgs:
                     if temp_img == best_image:
