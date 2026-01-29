@@ -7,6 +7,15 @@ import argparse
 import textwrap
 
 
+def _parse_bool(value: str) -> bool:
+    value = value.strip().lower()
+    if value in {"1", "true", "t", "yes", "y", "on"}:
+        return True
+    if value in {"0", "false", "f", "no", "n", "off"}:
+        return False
+    raise argparse.ArgumentTypeError(f"Invalid boolean value: '{value}'.")
+
+
 def get_parser() -> argparse.ArgumentParser:
     description = """
     dR2star wrapper for tat2 fmriprep runs.
@@ -131,22 +140,26 @@ def get_parser() -> argparse.ArgumentParser:
         help="Scale factor passed to tat2 (-scale).",
     )
     parser.add_argument(
-        "--no-voxscale",
-        dest="no_voxscale",
-        action="store_true",
-        help="Disable voxel scaling (tat2 -no_voxscale).",
+        "--voxscale",
+        dest="voxscale",
+        metavar="BOOL",
+        type=_parse_bool,
+        help=(
+            "Override method-derived voxel scaling choice. "
+            "Accepts true/false."
+        ),
     )
     parser.add_argument(
         "--inverse",
         dest="inverse",
         action="store_true",
-        help="Use 1/T2* input (tat2 -inverse).",
+        help="Output R2* (i.e., 1/T2*) instead of T2* (tat2 -inverse).",
     )
     parser.add_argument(
         "--time-norm",
         dest="time_norm",
         choices=["none", "mean", "median"],
-        default="none",
+        default="median",
         help=(
             "Time normalization method (tat2 -mean_time/-median_time). "
             "Use 'none' for default behavior."
@@ -156,10 +169,40 @@ def get_parser() -> argparse.ArgumentParser:
         "--volume-norm",
         dest="volume_norm",
         choices=["none", "mean", "median"],
-        default="none",
+        default="median",
         help=(
             "Volume normalization method (tat2 -mean_vol/-median_vol/-no_vol). "
             "Use 'none' to disable volume normalization."
+        ),
+    )
+    parser.add_argument(
+        "--method",
+        dest="method",
+        choices=["neglog", "signalproportion", "zsignalproportion"],
+        default="neglog",
+        help=(
+            "Computation method for the dR2star map. "
+            "Choices: neglog, signalproportion, zsignalproportion."
+        ),
+    )
+    parser.add_argument(
+        "--use-ln",
+        dest="use_ln",
+        metavar="BOOL",
+        type=_parse_bool,
+        help=(
+            "Override method-derived log transform choice. "
+            "Accepts true/false."
+        ),
+    )
+    parser.add_argument(
+        "--use-zscore",
+        dest="use_zscore",
+        metavar="BOOL",
+        type=_parse_bool,
+        help=(
+            "Override method-derived z-score choice. "
+            "Accepts true/false."
         ),
     )
     parser.add_argument(

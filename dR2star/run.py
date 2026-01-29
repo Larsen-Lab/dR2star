@@ -31,7 +31,7 @@ def build_cmd_template(
     ]
     if args.scale is not None:
         cmd.extend(["-scale", str(args.scale)])
-    if args.no_voxscale:
+    if not args.voxscale:
         cmd.append("-no_voxscale")
     if args.inverse:
         cmd.append("-inverse")
@@ -39,6 +39,11 @@ def build_cmd_template(
         cmd.append("-mean_time")
     elif args.time_norm == "median":
         cmd.append("-median_time")
+
+    if args.use_ln:
+        cmd.append("-calc_ln")
+    elif args.use_zscore:
+        cmd.append("-calc_zscore")
 
     if args.volume_norm == "mean":
         cmd.append("-mean_vol")
@@ -58,6 +63,64 @@ def build_cmd_template(
 def main(argv: list[str] | None = None) -> int:
     parser = get_parser()
     args = parser.parse_args(argv)
+    if args.method == "neglog":
+        default_use_ln = True
+        default_use_zscore = False
+        default_voxscale = False
+    elif args.method == "signalproportion":
+        default_use_ln = False
+        default_use_zscore = False
+        default_voxscale = False
+    elif args.method == "zsignalproportion":
+        default_use_ln = False
+        default_use_zscore = True
+        default_voxscale = False
+    else:
+        parser.error(f"Unsupported method '{args.method}'")
+    use_ln = default_use_ln
+    use_zscore = default_use_zscore
+    voxscale = default_voxscale
+    if args.use_ln is not None:
+        if args.use_ln != default_use_ln:
+            print(
+                "Warning: method chosen was "
+                f"{args.method}, which has default value for use_ln "
+                f"as {default_use_ln}, but this option is being changed "
+                f"to {args.use_ln} based on user-defined processing flags."
+            )
+        use_ln = args.use_ln
+        if args.use_ln and args.use_zscore is None:
+            use_zscore = False
+    if args.use_zscore is not None:
+        if args.use_zscore != default_use_zscore:
+            print(
+                "Warning: method chosen was "
+                f"{args.method}, which has default value for use_zscore "
+                f"as {default_use_zscore}, but this option is being changed "
+                f"to {args.use_zscore} based on user-defined processing flags."
+            )
+        use_zscore = args.use_zscore
+        if args.use_zscore and args.use_ln is None:
+            use_ln = False
+    if args.voxscale is not None:
+        if args.voxscale != default_voxscale:
+            print(
+                "Warning: method chosen was "
+                f"{args.method}, which has default value for voxscale "
+                f"as {default_voxscale}, but this option is being changed "
+                f"to {args.voxscale} based on user-defined processing flags."
+            )
+        voxscale = args.voxscale
+    if use_ln and use_zscore:
+        parser.error("--use-ln and --use-zscore cannot both be true.")
+    if voxscale and (use_ln or use_zscore):
+        parser.error(
+            "--voxscale cannot be combined with --use-ln/--use-zscore or a method "
+            "that implies them; tat2 requires -no_voxscale for those transforms."
+        )
+    args.use_ln = use_ln
+    args.use_zscore = use_zscore
+    args.voxscale = voxscale
 
     input_dir = Path(args.input_dir)
     output_dir = Path(args.output_dir)
