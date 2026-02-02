@@ -192,7 +192,7 @@ def get_parser() -> argparse.ArgumentParser:
         dest="maxvols",
         metavar="NVOL",
         type=int,
-        help="Limit total selected volumes across all runs in a group.",
+        help="Limit total selected volumes across all runs in a group of concatenated files.",
     )
     parser.add_argument(
         "--method",
