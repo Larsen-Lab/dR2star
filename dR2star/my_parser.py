@@ -133,6 +133,12 @@ def get_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--keep-merged",
+        dest="keep_merged",
+        action="store_true",
+        help="Keep merged intermediate volumes and their JSON sidecars.",
+    )
+    parser.add_argument(
         "--scale",
         dest="scale",
         metavar="SCALE",

@@ -51,6 +51,8 @@ def build_cmd_template(
         cmd.append("-no_vol")
     if args.tmp_dir:
         cmd.extend(["-tmp", args.tmp_dir])
+    else:
+        cmd.extend(["-tmp", str(output_path.parent)])
     if args.noclean:
         cmd.append("-noclean")
     if args.verbose:
@@ -349,7 +351,12 @@ def main(argv: list[str] | None = None) -> int:
                     args,
                 )
                 try:
-                    result = subprocess.run(cmd_template, check=False, env=env)
+                    result = subprocess.run(
+                        cmd_template,
+                        check=False,
+                        env=env,
+                        cwd=output_anat_dir,
+                    )
                 except FileNotFoundError:
                     parser.error("'tat2' not found on PATH. Ensure it is installed or in PATH.")
 
@@ -375,6 +382,9 @@ def main(argv: list[str] | None = None) -> int:
                     sidecar_json.write_text(
                         json.dumps(data, indent=2, sort_keys=True) + "\n"
                     )
+                if not args.keep_merged:
+                    merged_output_path.unlink(missing_ok=True)
+                    merged_json_path.unlink(missing_ok=True)
     return 0
 
 
