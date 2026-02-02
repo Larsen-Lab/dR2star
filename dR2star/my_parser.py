@@ -185,14 +185,14 @@ def get_parser() -> argparse.ArgumentParser:
         "--sample-method",
         dest="sample_method",
         choices=["first", "last", "random"],
-        help="Sub-sampling method for tat2 maxvols/maxvolstotal (tat2 -sample_method).",
+        help="Sub-sampling method for confounds-based volume selection.",
     )
     parser.add_argument(
         "--maxvols",
         dest="maxvols",
         metavar="NVOL",
         type=int,
-        help="Limit each run to NVOL volumes (tat2 -maxvols).",
+        help="Limit each run to NVOL volumes during confounds-based selection.",
     )
     parser.add_argument(
         "--method",
@@ -230,7 +230,7 @@ def get_parser() -> argparse.ArgumentParser:
         metavar="THRESH",
         type=float,
         default=0.3,
-        help="Framewise displacement threshold for fmriprep confounds (FD_THRES env).",
+        help="Framewise displacement threshold for confounds filtering.",
     )
     parser.add_argument(
         "--dvars-thresh",
