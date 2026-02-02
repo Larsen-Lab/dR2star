@@ -122,13 +122,13 @@ def get_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--average",
-        dest="average",
+        "--concat",
+        dest="concat",
         metavar="ENTITY",
         nargs="+",
         choices=["acq", "rec", "dir", "run", "echo", "part", "ce"],
         help=(
-            "Average volumes across the selected BIDS entities "
+            "Concatenate volumes across the selected BIDS entities "
             "(acq, rec, dir, run, echo, part, ce)."
         ),
     )

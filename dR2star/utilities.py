@@ -237,7 +237,16 @@ def merge_selected_volumes(
                 )
             subset_img = img
         else:
-            subset_img = img.slicer[..., keep_idxs]
+            keep_idxs = sorted(keep_idxs)
+            if len(keep_idxs) == 1:
+                subset_img = img.slicer[..., keep_idxs[0]]
+            elif keep_idxs == list(range(keep_idxs[0], keep_idxs[-1] + 1)):
+                subset_img = img.slicer[..., keep_idxs[0] : keep_idxs[-1] + 1]
+            else:
+                subset_img = nib.funcs.concat_images(
+                    [img.slicer[..., idx] for idx in keep_idxs],
+                    axis=3,
+                )
         selected_imgs.append(subset_img)
         selected_counts.append(len(keep_idxs))
 

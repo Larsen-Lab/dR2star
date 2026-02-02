@@ -242,7 +242,7 @@ def main(argv: list[str] | None = None) -> int:
                 mask_paths.append(mask_path)
 
             group_ids, num_groups, reduced_names = utilities.group_confounds_by_entities(
-                args.average or [],
+                args.concat or [],
                 confound_files,
             )
 
