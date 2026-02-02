@@ -299,8 +299,6 @@ def build_volume_selection_from_confounds(
     if sample_method not in {"first", "last", "random"}:
         raise ValueError(f"Unsupported sample_method '{sample_method}'.")
 
-    import nibabel as nib
-
     selections: dict[Path, list[int]] = {}
     rng = np.random.default_rng()
 
@@ -324,13 +322,7 @@ def build_volume_selection_from_confounds(
                 raise ValueError(f"DVARS column not found in {confound_path}.")
             censor[dvars > dvars_thresh] = 0
 
-        img = nib.load(str(nifti_path), mmap=True)
-        nvols = img.shape[3] if img.ndim > 3 else 1
-        if len(censor) != nvols:
-            raise ValueError(
-                f"Confounds length ({len(censor)}) does not match "
-                f"number of volumes ({nvols}) for {nifti_path}."
-            )
+        nvols = len(censor)
 
         keep_indices = np.where(censor == 1)[0].tolist()
         if sample_method == "last":
