@@ -9,10 +9,12 @@ import numpy as np
 
 
 def _normalize_labels(labels: list[str], prefix: str) -> list[str]:
+    """Strip a BIDS prefix from each label (e.g., sub-, ses-)."""
     return [label.removeprefix(prefix) for label in labels]
 
 
 def _discover_subjects(input_dir: Path, requested: list[str]) -> list[str]:
+    """Return subject labels from the input tree unless explicitly provided."""
     input_path = Path(input_dir)
     if requested:
         return requested
@@ -27,6 +29,7 @@ def _discover_subjects(input_dir: Path, requested: list[str]) -> list[str]:
 
 
 def _discover_sessions(subject_dir: Path, requested: list[str]) -> list[str | None]:
+    """Return session labels from a subject tree, or [None] when no sessions."""
     subject_path = Path(subject_dir)
     sessions = sorted(
         path.name.removeprefix("ses-")
@@ -49,6 +52,7 @@ def _discover_sessions(subject_dir: Path, requested: list[str]) -> list[str | No
 
 
 def _replace_confounds_suffix(filename: str, suffix: str) -> str:
+    """Swap a confounds TSV suffix for a target suffix."""
     if filename.endswith("_desc-confounds_timeseries.tsv"):
         return filename.replace("_desc-confounds_timeseries.tsv", suffix)
     if filename.endswith("_desc-confounds_regressors.tsv"):
@@ -107,7 +111,7 @@ def postprocess_tat2_json(
     json_path: Path,
     input_dir: Path,
     output_dir: Path,
-    confounds_path: Path,
+    confounds_path: Path | list[Path],
     fd_thres: float | None,
     dvars_thresh: float | None,
 ) -> None:
@@ -130,11 +134,15 @@ def postprocess_tat2_json(
         return value
 
     data = _rewrite(data)
-    confounds_value = _rewrite(str(confounds_path))
+    if isinstance(confounds_path, list):
+        confounds_value = [_rewrite(str(path)) for path in confounds_path]
+    else:
+        confounds_value = _rewrite(str(confounds_path))
     data["confounds_file"] = confounds_value
     data["fd_thres"] = fd_thres
     data["dvars_thresh"] = dvars_thresh
     json_path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+
 
 def confounds_to_censor_file(
     confounds_tsv: str,
@@ -177,12 +185,158 @@ def confounds_to_censor_file(
     return
 
 
+def group_confounds_by_entities(
+    entities: list[str],
+    confound_paths: list[Path | str],
+) -> tuple[list[int], int, list[str]]:
+    """Return aligned group IDs, group count, and reduced names after entity removal."""
+    group_ids: list[int] = []
+    reduced_names: list[str] = []
+    key_to_id: dict[str, int] = {}
+    for path in confound_paths:
+        name = Path(path).name
+        reduced_name = name
+        for entity in entities:
+            reduced_name = re.sub(rf"_{re.escape(entity)}-[^_]+", "", reduced_name)
+        if reduced_name not in key_to_id:
+            key_to_id[reduced_name] = len(key_to_id)
+        group_ids.append(key_to_id[reduced_name])
+        reduced_names.append(reduced_name)
+    return group_ids, len(key_to_id), reduced_names
+
+
+def merge_selected_volumes(
+    volumes_by_path: dict[Path | str, list[int]],
+    output_path: Path | str,
+    needs_resampling: bool,
+) -> Path:
+    """Merge selected volumes into one NIfTI, resampling to the largest selection."""
+    import nibabel as nib
+    from nibabel import processing
+
+    if not volumes_by_path:
+        raise ValueError("volumes_by_path is empty.")
+
+    selected_imgs: list[nib.Nifti1Image] = []
+    selected_counts: list[int] = []
+    for path, keep_mask in volumes_by_path.items():
+        img_path = Path(path)
+        img = nib.load(str(img_path), mmap=True)
+        nvols = img.shape[3] if img.ndim > 3 else 1
+        if len(keep_mask) != nvols:
+            raise ValueError(
+                f"Expected {nvols} mask entries for {img_path}, got {len(keep_mask)}."
+            )
+        keep_idxs = [i for i, flag in enumerate(keep_mask) if int(flag) == 1]
+        if not keep_idxs:
+            continue
+        if img.ndim == 3:
+            if keep_idxs != [0]:
+                raise ValueError(
+                    f"Invalid mask for 3D image {img_path}: {keep_idxs}."
+                )
+            subset_img = img
+        else:
+            subset_img = img.slicer[..., keep_idxs]
+        selected_imgs.append(subset_img)
+        selected_counts.append(len(keep_idxs))
+
+    if not selected_imgs:
+        raise ValueError("No volumes selected from any input image.")
+
+    ref_idx = int(np.argmax(selected_counts))
+    ref_img = selected_imgs[ref_idx]
+
+    if needs_resampling:
+        resampled_imgs: list[nib.Nifti1Image] = []
+        for idx, temp_img in enumerate(selected_imgs):
+            if idx == ref_idx:
+                resampled_imgs.append(temp_img)
+            else:
+                resampled_imgs.append(processing.resample_from_to(temp_img, ref_img))
+        selected_imgs = resampled_imgs
+
+    merged_img = nib.funcs.concat_images(selected_imgs, axis=3)
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    nib.save(merged_img, str(output_path))
+    return output_path
+
+
+def build_volume_selection_from_confounds(
+    confound_paths: list[Path | str],
+    nifti_paths: list[Path | str],
+    fd_thres: float,
+    dvars_thresh: float | None,
+    sample_method: str | None,
+    maxvols: int | None,
+) -> dict[Path, list[int]]:
+    """Return per-NIfTI 0/1 selection masks after FD/DVARS and sampling."""
+    if len(confound_paths) != len(nifti_paths):
+        raise ValueError(
+            "confound_paths and nifti_paths must have the same number of entries."
+        )
+    if sample_method is None:
+        sample_method = "first"
+    if sample_method not in {"first", "last", "random"}:
+        raise ValueError(f"Unsupported sample_method '{sample_method}'.")
+
+    import nibabel as nib
+
+    selections: dict[Path, list[int]] = {}
+    rng = np.random.default_rng()
+
+    for confound_path, nifti_path in zip(confound_paths, nifti_paths, strict=True):
+        confound_path = Path(confound_path)
+        nifti_path = Path(nifti_path)
+
+        confounds = pd.read_csv(confound_path, sep="\t")
+        fd = confounds.get("framewise_displacement")
+        if fd is None:
+            raise ValueError(
+                f"Framewise displacement column not found in {confound_path}."
+            )
+
+        censor = np.ones(len(confounds), dtype=int)
+        censor[fd > fd_thres] = 0
+
+        if dvars_thresh is not None:
+            dvars = confounds.get("dvars")
+            if dvars is None:
+                raise ValueError(f"DVARS column not found in {confound_path}.")
+            censor[dvars > dvars_thresh] = 0
+
+        img = nib.load(str(nifti_path), mmap=True)
+        nvols = img.shape[3] if img.ndim > 3 else 1
+        if len(censor) != nvols:
+            raise ValueError(
+                f"Confounds length ({len(censor)}) does not match "
+                f"number of volumes ({nvols}) for {nifti_path}."
+            )
+
+        keep_indices = np.where(censor == 1)[0].tolist()
+        if sample_method == "last":
+            keep_indices = list(reversed(keep_indices))
+        elif sample_method == "random":
+            rng.shuffle(keep_indices)
+
+        if maxvols is not None and maxvols > 0:
+            keep_indices = keep_indices[:maxvols]
+
+        mask = np.zeros(nvols, dtype=int)
+        if keep_indices:
+            mask[keep_indices] = 1
+        selections[nifti_path] = mask.tolist()
+
+    return selections
+
+
 def average_dR2star_vols(
     entities: list[str],
     anat_dir: Path,
     output_dir: Path,
 ) -> dict[str, list[str]]:
-    """Group dR2star volumes by removing selected BIDS entities from filenames."""
+    """Average dR2star volumes across selected BIDS entities."""
     reduced_map: dict[str, list[str]] = {}
     for path in sorted(anat_dir.glob("*dR2starmap.nii.gz")):
         name = path.name

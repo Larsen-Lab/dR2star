@@ -176,6 +176,19 @@ def get_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--sample-method",
+        dest="sample_method",
+        choices=["first", "last", "random"],
+        help="Sub-sampling method for tat2 maxvols/maxvolstotal (tat2 -sample_method).",
+    )
+    parser.add_argument(
+        "--maxvols",
+        dest="maxvols",
+        metavar="NVOL",
+        type=int,
+        help="Limit each run to NVOL volumes (tat2 -maxvols).",
+    )
+    parser.add_argument(
         "--method",
         dest="method",
         choices=["neglog", "signalproportion", "zsignalproportion"],
@@ -218,7 +231,7 @@ def get_parser() -> argparse.ArgumentParser:
         dest="dvars_thresh",
         metavar="THRESH",
         type=float,
-        help="DVARS threshold for confounds filtering (currently unused).",
+        help="DVARS threshold for confounds filtering (omit to disable).",
     )
     parser.add_argument(
         "-w",

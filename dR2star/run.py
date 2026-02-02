@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -13,7 +14,7 @@ from .my_parser import get_parser
 
 def build_cmd_template(
     bold_path: Path,
-    censor_output_path: Path,
+    censor_output_path: Path | None,
     mask_path: Path,
     output_path: Path,
     args,
@@ -22,13 +23,10 @@ def build_cmd_template(
     cmd = [
         "tat2",
         str(bold_path),
-        "-censor_rel",
-        str(censor_output_path),
-        "-mask",
-        str(mask_path),
-        "-output",
-        str(output_path),
     ]
+    if censor_output_path:
+        cmd.extend(["-censor_rel", str(censor_output_path)])
+    cmd.extend(["-mask", str(mask_path), "-output", str(output_path)])
     if args.scale is not None:
         cmd.extend(["-scale", str(args.scale)])
     if not args.voxscale:
@@ -125,6 +123,16 @@ def main(argv: list[str] | None = None) -> int:
     input_dir = Path(args.input_dir)
     output_dir = Path(args.output_dir)
     utilities.ensure_dataset_description(output_dir)
+    env = os.environ.copy()
+    if args.fd_thres is not None:
+        env["FD_THRES"] = str(args.fd_thres)
+
+    def to_bids_uri(path: Path) -> str:
+        return (
+            str(path)
+            .replace(str(input_dir), "bids:preprocessed:")
+            .replace(str(output_dir), "bids::")
+        )
 
     participant_labels = utilities._normalize_labels(args.participant_label or [], "sub-")
     ses_labels = utilities._normalize_labels(args.ses_label or [], "ses-")
@@ -138,9 +146,12 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print("Sessions: all")
 
-    env = os.environ.copy()
-    if args.fd_thres is not None:
-        env["FD_THRES"] = str(args.fd_thres)
+
+    space_token = args.space.replace(":", "_")
+    if (space_token == "T1w") or (space_token == "T2w"):
+        is_native = True
+    else:
+        is_native = False
 
     subjects = utilities._discover_subjects(input_dir, participant_labels)
     print(f"Found a total of {len(subjects)} subjects that will be considered for processing.")
@@ -193,26 +204,11 @@ def main(argv: list[str] | None = None) -> int:
             output_anat_dir.mkdir(parents=True, exist_ok=True)
 
             #For every confound file, try to run the dR2star pipeline.
+            confound_names: list[Path] = []
+            bold_paths: list[Path] = []
+            mask_paths: list[Path] = []
             for confound_file in confound_files:
-                print(f"Run: {confound_file.name}")
-
-                #Populate the corresponding output censor file name.
                 confound_name = confound_file.name
-                censor_name = utilities._replace_confounds_suffix(
-                    confound_name,
-                    "_desc-dR2star_censor.1D",
-                )
-                censor_output_path = output_anat_dir / censor_name
-                
-                #Create the censor file from the confounds and the given thresholds.
-                utilities.confounds_to_censor_file(
-                    confound_file,
-                    str(censor_output_path),
-                    fd_thres=args.fd_thres,
-                    dvars_thresh=args.dvars_thresh,
-                )
-
-                space_token = args.space.replace(":", "_")
                 bold_name = utilities._replace_confounds_suffix(
                     confound_name,
                     f"_space-{space_token}_desc-preproc_bold.nii.gz",
@@ -241,18 +237,113 @@ def main(argv: list[str] | None = None) -> int:
                         raise FileNotFoundError(
                             f"--mask-input does not exist: {args.mask_input}"
                         )
+                confound_names.append(confound_file)
+                bold_paths.append(bold_path)
+                mask_paths.append(mask_path)
 
-                if not bold_name.endswith("_desc-preproc_bold.nii.gz"):
-                    raise NameError(f"Unexpected bold file name format: {bold_name}")
-                output_name = bold_name.replace(
-                    "_desc-preproc_bold.nii.gz",
+            group_ids, num_groups, reduced_names = utilities.group_confounds_by_entities(
+                args.average or [],
+                confound_files,
+            )
+
+            for group_idx in range(num_groups):
+                group_confound_files = [
+                    path
+                    for path, gid in zip(confound_names, group_ids)
+                    if gid == group_idx
+                ]
+                if not group_confound_files:
+                    continue
+                group_bold_paths = [
+                    path
+                    for path, gid in zip(bold_paths, group_ids)
+                    if gid == group_idx
+                ]
+                group_mask_paths = [
+                    path
+                    for path, gid in zip(mask_paths, group_ids)
+                    if gid == group_idx
+                ]
+                group_reduced_names = [
+                    name
+                    for name, gid in zip(reduced_names, group_ids)
+                    if gid == group_idx
+                ]
+                if not group_bold_paths or not group_mask_paths:
+                    continue
+                selections = utilities.build_volume_selection_from_confounds(
+                    group_confound_files,
+                    group_bold_paths,
+                    fd_thres=args.fd_thres,
+                    dvars_thresh=args.dvars_thresh,
+                    sample_method=args.sample_method,
+                    maxvols=args.maxvols,
+                )
+                best_bold_path = max(selections, key=lambda path: len(selections[path]))
+                try:
+                    best_index = [
+                        Path(path) for path in group_bold_paths
+                    ].index(Path(best_bold_path))
+                except ValueError:
+                    raise ValueError(
+                        "Unable to match selected volume source to a mask path."
+                    )
+                mask_path = group_mask_paths[best_index]
+                if len({str(path) for path in group_mask_paths}) > 1:
+                    print(
+                        "Warning: multiple mask files found for a merged group; "
+                        f"using {mask_path.name} from the run with the most volumes."
+                    )
+                reduced_name = group_reduced_names[0]
+                merged_bold_name = utilities._replace_confounds_suffix(
+                    reduced_name,
+                    f"_space-{space_token}_desc-MergedIntermediate_bold.nii.gz",
+                )
+                merged_output_path = output_anat_dir / merged_bold_name
+                utilities.merge_selected_volumes(
+                    selections,
+                    merged_output_path,
+                    needs_resampling=is_native,
+                )
+
+                selection_sources = [to_bids_uri(path) for path in group_bold_paths]
+                volume_selection: dict[str, dict[str, list[int]]] = {}
+                for path, mask in selections.items():
+                    indices = [idx for idx, flag in enumerate(mask) if flag == 1]
+                    volume_selection[to_bids_uri(Path(path))] = {
+                        "mask": mask,
+                        "indices": indices,
+                    }
+                selection_metadata = {
+                    "source_data": selection_sources,
+                    "volume_selection": volume_selection,
+                    "selection_params": {
+                        "fd_thres": args.fd_thres,
+                        "dvars_thresh": args.dvars_thresh,
+                        "sample_method": args.sample_method or "first",
+                        "maxvols": args.maxvols,
+                    },
+                }
+                merged_json_path = Path(
+                    str(merged_output_path).replace(".nii.gz", ".json")
+                )
+                merged_json_path.write_text(
+                    json.dumps(selection_metadata, indent=2, sort_keys=True) + "\n"
+                )
+
+                if not merged_bold_name.endswith("_desc-MergedIntermediate_bold.nii.gz"):
+                    raise NameError(
+                        f"Unexpected merged bold file name format: {merged_bold_name}"
+                    )
+                output_name = merged_bold_name.replace(
+                    "_desc-MergedIntermediate_bold.nii.gz",
                     "_desc-dR2star_dR2starmap.nii.gz",
                 )
                 output_path = output_anat_dir / output_name
 
                 cmd_template = build_cmd_template(
-                    bold_path,
-                    censor_output_path,
+                    merged_output_path,
+                    None,
                     mask_path,
                     output_path,
                     args,
@@ -273,12 +364,17 @@ def main(argv: list[str] | None = None) -> int:
                         sidecar_json,
                         input_dir,
                         output_dir,
-                        confound_file,
+                        group_confound_files,
                         args.fd_thres,
                         args.dvars_thresh,
                     )
-            if args.average:
-                utilities.average_dR2star_vols(args.average, output_anat_dir, output_dir)
+                    data = json.loads(sidecar_json.read_text())
+                    data["volume_selection"] = selection_metadata["volume_selection"]
+                    data["selection_params"] = selection_metadata["selection_params"]
+                    data["source_data"] = selection_metadata["source_data"]
+                    sidecar_json.write_text(
+                        json.dumps(data, indent=2, sort_keys=True) + "\n"
+                    )
     return 0
 
 
