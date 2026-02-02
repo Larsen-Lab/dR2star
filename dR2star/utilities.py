@@ -292,7 +292,7 @@ def build_volume_selection_from_confounds(
     sample_method: str | None,
     maxvols: int | None,
 ) -> dict[Path, list[int]]:
-    """Return per-NIfTI 0/1 selection masks after FD/DVARS and sampling."""
+    """Return per-NIfTI 0/1 selection masks after FD/DVARS and group sampling."""
     if len(confound_paths) != len(nifti_paths):
         raise ValueError(
             "confound_paths and nifti_paths must have the same number of entries."
@@ -302,13 +302,11 @@ def build_volume_selection_from_confounds(
     if sample_method not in {"first", "last", "random"}:
         raise ValueError(f"Unsupported sample_method '{sample_method}'.")
 
-    selections: dict[Path, list[int]] = {}
-    rng = np.random.default_rng()
+    per_run_keep: list[list[int]] = []
+    per_run_nvols: list[int] = []
 
-    for confound_path, nifti_path in zip(confound_paths, nifti_paths, strict=True):
+    for confound_path in confound_paths:
         confound_path = Path(confound_path)
-        nifti_path = Path(nifti_path)
-
         confounds = pd.read_csv(confound_path, sep="\t")
         fd = confounds.get("framewise_displacement")
         if fd is None:
@@ -325,21 +323,41 @@ def build_volume_selection_from_confounds(
                 raise ValueError(f"DVARS column not found in {confound_path}.")
             censor[dvars > dvars_thresh] = 0
 
-        nvols = len(censor)
-
         keep_indices = np.where(censor == 1)[0].tolist()
-        if sample_method == "last":
-            keep_indices = list(reversed(keep_indices))
-        elif sample_method == "random":
-            rng.shuffle(keep_indices)
+        per_run_keep.append(keep_indices)
+        per_run_nvols.append(len(censor))
 
-        if maxvols is not None and maxvols > 0:
-            keep_indices = keep_indices[:maxvols]
+    global_indices: list[tuple[int, int]] = []
+    for run_idx, keep_indices in enumerate(per_run_keep):
+        for vol_idx in keep_indices:
+            global_indices.append((run_idx, vol_idx))
 
+    if maxvols is not None and maxvols > 0:
+        if sample_method == "first":
+            selected = global_indices[:maxvols]
+        elif sample_method == "last":
+            selected = global_indices[-maxvols:]
+        else:
+            rng = np.random.default_rng()
+            if maxvols >= len(global_indices):
+                selected = global_indices
+            else:
+                choice_idx = rng.choice(len(global_indices), size=maxvols, replace=False)
+                selected = [global_indices[idx] for idx in choice_idx]
+    else:
+        selected = global_indices
+
+    selected_by_run: dict[int, set[int]] = {}
+    for run_idx, vol_idx in selected:
+        selected_by_run.setdefault(run_idx, set()).add(vol_idx)
+
+    selections: dict[Path, list[int]] = {}
+    for run_idx, nifti_path in enumerate(nifti_paths):
+        nvols = per_run_nvols[run_idx]
         mask = np.zeros(nvols, dtype=int)
-        if keep_indices:
-            mask[keep_indices] = 1
-        selections[nifti_path] = mask.tolist()
+        for vol_idx in selected_by_run.get(run_idx, set()):
+            mask[vol_idx] = 1
+        selections[Path(nifti_path)] = mask.tolist()
 
     return selections
 

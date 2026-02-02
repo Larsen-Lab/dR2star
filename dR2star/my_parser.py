@@ -185,14 +185,14 @@ def get_parser() -> argparse.ArgumentParser:
         "--sample-method",
         dest="sample_method",
         choices=["first", "last", "random"],
-        help="Sub-sampling method for confounds-based volume selection.",
+        help="Sub-sampling method for confounds-based selection across runs.",
     )
     parser.add_argument(
         "--maxvols",
         dest="maxvols",
         metavar="NVOL",
         type=int,
-        help="Limit each run to NVOL volumes during confounds-based selection.",
+        help="Limit total selected volumes across all runs in a group.",
     )
     parser.add_argument(
         "--method",
