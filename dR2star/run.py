@@ -230,6 +230,9 @@ def main(argv: list[str] | None = None) -> int:
                 ]
 
             output_anat_dir.mkdir(parents=True, exist_ok=True)
+            print(
+                f"Found {len(confound_files)} confound file(s) for session {session_label}."
+            )
 
             #For every confound file, try to run the dR2star pipeline.
             confound_names: list[Path] = []
@@ -273,8 +276,10 @@ def main(argv: list[str] | None = None) -> int:
                 args.concat or [],
                 confound_files,
             )
+            print(f"Grouping into {num_groups} run group(s) using --concat.")
 
             for group_idx in range(num_groups):
+                print(f"Processing group {group_idx + 1}/{num_groups}.")
                 group_confound_files = [
                     path
                     for path, gid in zip(confound_names, group_ids)
@@ -322,17 +327,24 @@ def main(argv: list[str] | None = None) -> int:
                         "Warning: multiple mask files found for a merged group; "
                         f"using {mask_path.name} from the run with the most volumes."
                     )
+                total_kept = sum(sum(mask) for mask in selections.values())
+                print(
+                    f"Selected {total_kept} total volume(s) across "
+                    f"{len(group_bold_paths)} run(s)."
+                )
                 reduced_name = group_reduced_names[0]
                 merged_bold_name = utilities._replace_confounds_suffix(
                     reduced_name,
                     f"_space-{space_token}_desc-MergedIntermediate_bold.nii.gz",
                 )
                 merged_output_path = output_anat_dir / merged_bold_name
+                print(f"Writing merged intermediate: {merged_output_path.name}")
                 utilities.merge_selected_volumes(
                     selections,
                     merged_output_path,
                     needs_resampling=is_native,
                 )
+                print("Merged intermediate complete.")
 
                 selection_sources = [to_bids_uri(path) for path in group_bold_paths]
                 volume_selection: dict[str, dict[str, list[int]]] = {}
@@ -364,6 +376,7 @@ def main(argv: list[str] | None = None) -> int:
                     "_desc-dR2star_dR2starmap.nii.gz",
                 )
                 output_path = output_anat_dir / output_name
+                print(f"Running tat2 for: {output_path.name}")
 
                 cmd_template = build_cmd_template(
                     merged_output_path,
@@ -384,6 +397,7 @@ def main(argv: list[str] | None = None) -> int:
 
                 if result.returncode != 0:
                     return result.returncode
+                print("tat2 complete.")
 
                 log_json = Path(str(output_path).replace(".nii.gz", ".log.json"))
                 if log_json.exists():
@@ -403,6 +417,7 @@ def main(argv: list[str] | None = None) -> int:
                     data["source_data"] = selection_metadata["source_data"]
                     write_json_with_inline_masks(sidecar_json, data)
                 if not args.keep_merged:
+                    print(f"Removing merged intermediate: {merged_output_path.name}")
                     merged_output_path.unlink(missing_ok=True)
                     merged_json_path.unlink(missing_ok=True)
     return 0
