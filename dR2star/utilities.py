@@ -239,12 +239,12 @@ def merge_selected_volumes(
         else:
             keep_idxs = sorted(keep_idxs)
             if len(keep_idxs) == 1:
-                subset_img = img.slicer[..., keep_idxs[0]]
+                subset_img = img.slicer[..., keep_idxs[0] : keep_idxs[0] + 1]
             elif keep_idxs == list(range(keep_idxs[0], keep_idxs[-1] + 1)):
                 subset_img = img.slicer[..., keep_idxs[0] : keep_idxs[-1] + 1]
             else:
                 subset_img = nib.funcs.concat_images(
-                    [img.slicer[..., idx] for idx in keep_idxs],
+                    [img.slicer[..., idx : idx + 1] for idx in keep_idxs],
                     axis=3,
                 )
         selected_imgs.append(subset_img)
@@ -265,6 +265,15 @@ def merge_selected_volumes(
                 resampled_imgs.append(processing.resample_from_to(temp_img, ref_img))
         selected_imgs = resampled_imgs
 
+    if selected_imgs[0].ndim == 3:
+        selected_imgs = [
+            nib.Nifti1Image(
+                np.expand_dims(np.asanyarray(img.dataobj), axis=3),
+                img.affine,
+                img.header,
+            )
+            for img in selected_imgs
+        ]
     merged_img = nib.funcs.concat_images(selected_imgs, axis=3)
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
