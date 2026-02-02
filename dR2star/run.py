@@ -312,6 +312,10 @@ def main(argv: list[str] | None = None) -> int:
                     sample_method=args.sample_method,
                     maxvols=args.maxvols,
                 )
+                print("Merge inputs and selected volume counts:")
+                for path in group_bold_paths:
+                    mask = selections.get(path, [])
+                    print(f"  - {path.name}: {sum(mask)} volume(s)")
                 best_bold_path = max(selections, key=lambda path: len(selections[path]))
                 try:
                     best_index = [
