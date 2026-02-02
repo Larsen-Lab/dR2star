@@ -121,8 +121,11 @@ def postprocess_tat2_json(
         str(input_dir): "bids:preprocessed:",
         str(output_dir): "bids::",
     }
+    skip_keys = {"cmd", "collapse_cmd", "roistats_cmds", "volume_norm_cmds"}
 
-    def _rewrite(value):
+    def _rewrite(value, key: str | None = None):
+        if key in skip_keys:
+            return value
         if isinstance(value, str):
             for src, dst in replacements.items():
                 value = value.replace(src, dst)
@@ -130,7 +133,7 @@ def postprocess_tat2_json(
         if isinstance(value, list):
             return [_rewrite(item) for item in value]
         if isinstance(value, dict):
-            return {key: _rewrite(item) for key, item in value.items()}
+            return {k: _rewrite(v, k) for k, v in value.items()}
         return value
 
     data = _rewrite(data)

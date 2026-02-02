@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import uuid
 from pathlib import Path
 
 from . import utilities
@@ -135,6 +136,31 @@ def main(argv: list[str] | None = None) -> int:
             .replace(str(input_dir), "bids:preprocessed:")
             .replace(str(output_dir), "bids::")
         )
+
+    def write_json_with_inline_masks(path: Path, payload: dict) -> None:
+        mask_tokens: dict[str, list[int]] = {}
+
+        def _mark_masks(obj):
+            if isinstance(obj, dict):
+                marked: dict = {}
+                for key, value in obj.items():
+                    if key == "mask" and isinstance(value, list):
+                        token = f"__MASK_INLINE_{uuid.uuid4().hex}__"
+                        mask_tokens[token] = [int(v) for v in value]
+                        marked[key] = token
+                    else:
+                        marked[key] = _mark_masks(value)
+                return marked
+            if isinstance(obj, list):
+                return [_mark_masks(item) for item in obj]
+            return obj
+
+        marked_payload = _mark_masks(payload)
+        json_text = json.dumps(marked_payload, indent=2, sort_keys=True)
+        for token, mask in mask_tokens.items():
+            mask_text = "[" + ", ".join(str(v) for v in mask) + "]"
+            json_text = json_text.replace(f"\"{token}\"", mask_text)
+        path.write_text(json_text + "\n")
 
     participant_labels = utilities._normalize_labels(args.participant_label or [], "sub-")
     ses_labels = utilities._normalize_labels(args.ses_label or [], "ses-")
@@ -311,10 +337,8 @@ def main(argv: list[str] | None = None) -> int:
                 selection_sources = [to_bids_uri(path) for path in group_bold_paths]
                 volume_selection: dict[str, dict[str, list[int]]] = {}
                 for path, mask in selections.items():
-                    indices = [idx for idx, flag in enumerate(mask) if flag == 1]
                     volume_selection[to_bids_uri(Path(path))] = {
                         "mask": mask,
-                        "indices": indices,
                     }
                 selection_metadata = {
                     "source_data": selection_sources,
@@ -329,9 +353,7 @@ def main(argv: list[str] | None = None) -> int:
                 merged_json_path = Path(
                     str(merged_output_path).replace(".nii.gz", ".json")
                 )
-                merged_json_path.write_text(
-                    json.dumps(selection_metadata, indent=2, sort_keys=True) + "\n"
-                )
+                write_json_with_inline_masks(merged_json_path, selection_metadata)
 
                 if not merged_bold_name.endswith("_desc-MergedIntermediate_bold.nii.gz"):
                     raise NameError(
@@ -379,9 +401,7 @@ def main(argv: list[str] | None = None) -> int:
                     data["volume_selection"] = selection_metadata["volume_selection"]
                     data["selection_params"] = selection_metadata["selection_params"]
                     data["source_data"] = selection_metadata["source_data"]
-                    sidecar_json.write_text(
-                        json.dumps(data, indent=2, sort_keys=True) + "\n"
-                    )
+                    write_json_with_inline_masks(sidecar_json, data)
                 if not args.keep_merged:
                     merged_output_path.unlink(missing_ok=True)
                     merged_json_path.unlink(missing_ok=True)
