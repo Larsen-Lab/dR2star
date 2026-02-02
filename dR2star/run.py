@@ -259,6 +259,12 @@ def main(argv: list[str] | None = None) -> int:
                 else:
                     mask_input = Path(args.mask_input)
                     if mask_input.is_file():
+                        if is_native:
+                            raise ValueError(
+                                "Single custom mask files are only supported for "
+                                "non-native spaces. Use a derivatives mask or "
+                                "choose a non-native space."
+                            )
                         mask_path = mask_input
                     elif mask_input.is_dir():
                         raise NotImplementedError(
