@@ -60,6 +60,82 @@ def _replace_confounds_suffix(filename: str, suffix: str) -> str:
     raise NameError(f"Unexpected confound file name format: {filename}")
 
 
+def find_mask_in_directory(
+    mask_root: Path,
+    subject: str,
+    session: str | None,
+    space_token: str,
+) -> Path:
+    """Find a single mask file in a derivatives-like mask directory."""
+    subject_dir = mask_root / f"sub-{subject}"
+    if session:
+        anat_dir = subject_dir / f"ses-{session}" / "anat"
+        session_tag = f"_ses-{session}"
+    else:
+        anat_dir = subject_dir / "anat"
+        session_tag = ""
+
+    if not anat_dir.exists():
+        raise FileNotFoundError(
+            "Mask directory missing expected anat folder: "
+            f"{anat_dir}. Ensure the mask directory mirrors the input layout."
+        )
+
+    pattern = (
+        f"sub-{subject}{session_tag}*"
+        f"_space-{space_token}_desc-brain_mask.nii.gz"
+    )
+    matches = sorted(anat_dir.glob(pattern))
+    if len(matches) != 1:
+        raise ValueError(
+            "Expected exactly 1 mask file matching "
+            f"'{pattern}' in {anat_dir}, found {len(matches)}. "
+            "Ensure there is exactly one mask per subject/session/space or "
+            "rename masks to match the expected pattern."
+        )
+    return matches[0]
+
+
+def resample_mask_to_reference(
+    mask_path: Path,
+    reference_path: Path,
+    output_dir: Path,
+) -> tuple[Path, bool]:
+    """Resample a mask to a reference image grid if needed."""
+    import nibabel as nib
+    from nibabel import processing
+
+    mask_img = nib.load(str(mask_path), mmap=True)
+    ref_img = nib.load(str(reference_path), mmap=True)
+
+    if mask_img.ndim > 3:
+        if mask_img.shape[3] != 1:
+            raise ValueError(
+                f"Mask {mask_path} must be 3D or single-volume 4D, "
+                f"got shape {mask_img.shape}."
+            )
+        mask_img = mask_img.slicer[..., 0]
+    if ref_img.ndim > 3:
+        ref_img = ref_img.slicer[..., 0]
+
+    same_shape = mask_img.shape[:3] == ref_img.shape[:3]
+    same_affine = np.allclose(mask_img.affine, ref_img.affine)
+    if same_shape and same_affine:
+        return mask_path, False
+
+    resampled = processing.resample_from_to(mask_img, ref_img, order=0)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    if mask_path.name.endswith(".nii.gz"):
+        stem = mask_path.name[:-7]
+        out_name = f"{stem}_resampled.nii.gz"
+    else:
+        out_name = f"{mask_path.stem}_resampled{mask_path.suffix}"
+    out_path = output_dir / out_name
+    nib.save(resampled, str(out_path))
+    return out_path, True
+
+
 def ensure_dataset_description(output_dir: Path) -> Path:
     """Create a minimal BIDS derivatives dataset_description.json if missing."""
     output_dir.mkdir(parents=True, exist_ok=True)
