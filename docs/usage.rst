@@ -1,5 +1,5 @@
-Command-Line Arguments
-----------------------
+Usage
+-----
 .. argparse::
    :ref: dR2star.my_parser.get_parser
    :prog: dR2star
@@ -22,7 +22,7 @@ This workflow supports three masking modes, depending on the ``--mask-input`` fl
    input layout (``sub-<id>/[ses-<id>/]anat``). The workflow searches for exactly
    one mask per subject/session using the pattern:
 
-   ``sub-<id>[_ses-<id>]*_space-<space>_desc-brain_mask.nii.gz``
+   ``sub-<id>[_ses-<id>]*_space-<space>[_res-<res>]_desc-brain_mask.nii.gz``
 
    If zero or multiple masks match, the run stops with a descriptive error. If the mask
    lives on a different grid than the merged BOLD data, it is resampled using nearest-neighbor
