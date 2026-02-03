@@ -32,3 +32,6 @@ This workflow supports three masking modes, depending on the ``--mask-input`` fl
 
    Similar to case (1), if multiple runs are to be concatenated, the mask will be resampled
    to the space of the fMRI run with the most volumes.
+   
+   **Warning:** For native spaces (T1w/T2w), the pipeline assumes masks are already aligned
+   to the corresponding preprocessed T1w/T2w anatomy in the fMRIPrep ``anat`` directory.
