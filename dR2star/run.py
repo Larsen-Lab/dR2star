@@ -144,7 +144,7 @@ def main(argv: list[str] | None = None) -> int:
             if isinstance(obj, dict):
                 marked: dict = {}
                 for key, value in obj.items():
-                    if key == "mask" and isinstance(value, list):
+                    if key == "temporal_mask" and isinstance(value, list):
                         token = f"__MASK_INLINE_{uuid.uuid4().hex}__"
                         mask_tokens[token] = [int(v) for v in value]
                         marked[key] = token
@@ -360,7 +360,7 @@ def main(argv: list[str] | None = None) -> int:
                 volume_selection: dict[str, dict[str, list[int]]] = {}
                 for path, mask in selections.items():
                     volume_selection[to_bids_uri(Path(path))] = {
-                        "mask": mask,
+                        "temporal_mask": mask,
                     }
                 selection_metadata = {
                     "source_data": selection_sources,

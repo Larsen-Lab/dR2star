@@ -137,14 +137,18 @@ def postprocess_tat2_json(
         return value
 
     data = _rewrite(data)
+    data.pop("censor_files", None)
     if isinstance(confounds_path, list):
         confounds_value = [_rewrite(str(path)) for path in confounds_path]
     else:
         confounds_value = _rewrite(str(confounds_path))
-    data["confounds_file"] = confounds_value
-    data["fd_thres"] = fd_thres
-    data["dvars_thresh"] = dvars_thresh
-    json_path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+    payload = {
+        "tat2_generated": data,
+        "confounds_file": confounds_value,
+        "fd_thres": fd_thres,
+        "dvars_thresh": dvars_thresh,
+    }
+    json_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
 def confounds_to_censor_file(
