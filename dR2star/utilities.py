@@ -162,9 +162,11 @@ def mask_path_to_uri(
     output_dir = Path(output_dir)
 
     if mask_path.is_relative_to(output_dir):
-        return str(mask_path).replace(str(output_dir), "bids::")
+        rel = mask_path.relative_to(output_dir)
+        return f"bids::{rel.as_posix()}"
     if mask_path.is_relative_to(input_dir):
-        return str(mask_path).replace(str(input_dir), "bids:preprocessed:")
+        rel = mask_path.relative_to(input_dir)
+        return f"bids:preprocessed:{rel.as_posix()}"
 
     if mask_input is None:
         return str(mask_path)
@@ -177,7 +179,7 @@ def mask_path_to_uri(
         except ValueError:
             return str(mask_path)
     if mask_input_path.is_file():
-        return f"bids:mask_file:{mask_path}"
+        return f"bids:mask_file:{mask_path.as_posix().lstrip('/')}"
     return str(mask_path)
 
 
@@ -244,13 +246,23 @@ def postprocess_tat2_json(
     }
     skip_keys = {"cmd", "collapse_cmd", "roistats_cmds", "volume_norm_cmds"}
 
+    def _rewrite_str(value: str) -> str:
+        if value.startswith("bids:"):
+            return value
+        for src, dst in replacements.items():
+            src_path = Path(src)
+            try:
+                rel = Path(value).relative_to(src_path)
+            except ValueError:
+                continue
+            return f"{dst}{rel.as_posix()}"
+        return value
+
     def _rewrite(value, key: str | None = None):
         if key in skip_keys:
             return value
         if isinstance(value, str):
-            for src, dst in replacements.items():
-                value = value.replace(src, dst)
-            return value
+            return _rewrite_str(value)
         if isinstance(value, list):
             return [_rewrite(item) for item in value]
         if isinstance(value, dict):

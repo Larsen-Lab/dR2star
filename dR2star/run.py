@@ -131,11 +131,14 @@ def main(argv: list[str] | None = None) -> int:
         env["FD_THRES"] = str(args.fd_thres)
 
     def to_bids_uri(path: Path) -> str:
-        return (
-            str(path)
-            .replace(str(input_dir), "bids:preprocessed:")
-            .replace(str(output_dir), "bids::")
-        )
+        path = Path(path)
+        if path.is_relative_to(output_dir):
+            rel = path.relative_to(output_dir)
+            return f"bids::{rel.as_posix()}"
+        if path.is_relative_to(input_dir):
+            rel = path.relative_to(input_dir)
+            return f"bids:preprocessed:{rel.as_posix()}"
+        return str(path)
 
     def write_json_with_inline_masks(path: Path, payload: dict) -> None:
         mask_tokens: dict[str, list[int]] = {}
