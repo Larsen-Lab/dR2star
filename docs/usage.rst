@@ -35,3 +35,21 @@ This workflow supports three masking modes, depending on the ``--mask-input`` fl
    
    **Warning:** For native spaces (T1w/T2w), the pipeline assumes masks are already aligned
    to the corresponding preprocessed T1w/T2w anatomy in the fMRIPrep ``anat`` directory.
+
+   Example directory layouts:
+
+   - **Default MNI (with resolution tag)**::
+
+       mask_dir/
+         sub-001/
+           ses-01/
+             anat/
+               sub-001_ses-01_space-MNI152NLin6Asym_res-2_desc-brain_mask.nii.gz
+
+   - **T1w native space**::
+
+       mask_dir/
+         sub-001/
+           ses-01/
+             anat/
+               sub-001_ses-01_space-T1w_desc-brain_mask.nii.gz
