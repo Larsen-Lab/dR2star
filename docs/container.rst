@@ -1,3 +1,5 @@
+:tocdepth: 1
+
 Container Usage
 ---------------
 This page covers how to find, download, and run the dR2star container using
