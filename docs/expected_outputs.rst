@@ -60,6 +60,10 @@ The ``--concat`` flag can group volumes across other BIDS entities, not just
 In general, the entities you concatenate over are removed from the output
 filename to reflect the merged group.
 
+**Warning:** Only concatenate entities that have compatible acquisition
+parameters. For example, you may not want to merge runs with different voxel sizes, echo
+times, etc.
+
 Mask-related outputs
 --------------------
 Masking mostly affects the JSON and, in some cases, adds a resampled mask to the
