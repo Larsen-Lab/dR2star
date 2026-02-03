@@ -99,8 +99,8 @@ def get_parser() -> argparse.ArgumentParser:
         nargs="+",
         help=(
             "Optional task ID(s) to process. Provide one or more task IDs "
-            "separated by spaces (e.g., 'rest' 'nback'). By default all tasks 
-            "are processed."
+            "separated by spaces (e.g., 'rest' 'nback'). "
+            "By default all tasks are processed."
         ),
     )
     parser.add_argument(
