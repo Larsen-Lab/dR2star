@@ -100,6 +100,7 @@ def resample_mask_to_reference(
     mask_path: Path,
     reference_path: Path,
     output_dir: Path,
+    output_base: Path | None = None,
 ) -> tuple[Path, bool]:
     """Resample a mask to a reference image grid if needed."""
     import nibabel as nib
@@ -126,7 +127,20 @@ def resample_mask_to_reference(
     resampled = processing.resample_from_to(mask_img, ref_img, order=0)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    if mask_path.name.endswith(".nii.gz"):
+    if output_base is not None:
+        base_name = output_base.name
+        if base_name.endswith(".nii.gz"):
+            base = base_name[:-7]
+        elif base_name.endswith(".nii"):
+            base = base_name[:-4]
+        else:
+            base = output_base.stem
+        if "_desc-dR2star_dR2starmap" in base:
+            base = base.replace("_desc-dR2star_dR2starmap", "_desc-dR2star_mask")
+        else:
+            base = f"{base}_desc-dR2star_mask"
+        out_name = f"{base}.nii.gz"
+    elif mask_path.name.endswith(".nii.gz"):
         stem = mask_path.name[:-7]
         out_name = f"{stem}_resampled.nii.gz"
     else:

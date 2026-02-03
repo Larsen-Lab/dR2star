@@ -373,13 +373,41 @@ def main(argv: list[str] | None = None) -> int:
                     needs_resampling=is_native,
                 )
                 print("Merged intermediate complete.")
+
+                if not merged_bold_name.endswith("_desc-MergedIntermediate_bold.nii.gz"):
+                    raise NameError(
+                        f"Unexpected merged bold file name format: {merged_bold_name}"
+                    )
+                output_name = merged_bold_name.replace(
+                    "_desc-MergedIntermediate_bold.nii.gz",
+                    "_desc-dR2star_dR2starmap.nii.gz",
+                )
+                output_path = output_anat_dir / output_name
+
+                original_mask_path = mask_path
                 mask_path, mask_resampled = utilities.resample_mask_to_reference(
                     mask_path,
                     merged_output_path,
                     output_anat_dir,
+                    output_base=output_path,
                 )
+                mask_resample_map = None
                 if mask_resampled:
                     print(f"Resampled mask saved as: {mask_path.name}")
+                    mask_resample_map = {
+                        "original": utilities.mask_path_to_uri(
+                            original_mask_path,
+                            input_dir,
+                            output_dir,
+                            args.mask_input,
+                        ),
+                        "resampled": utilities.mask_path_to_uri(
+                            mask_path,
+                            input_dir,
+                            output_dir,
+                            args.mask_input,
+                        ),
+                    }
 
                 selection_sources = [to_bids_uri(path) for path in group_bold_paths]
                 volume_selection: dict[str, dict[str, list[int]]] = {}
@@ -404,20 +432,12 @@ def main(argv: list[str] | None = None) -> int:
                     "fd_thres": args.fd_thres,
                     "dvars_thresh": args.dvars_thresh,
                 }
+                if mask_resample_map is not None:
+                    selection_metadata["mask_resample_map"] = mask_resample_map
                 merged_json_path = Path(
                     str(merged_output_path).replace(".nii.gz", ".json")
                 )
                 write_json_with_inline_masks(merged_json_path, selection_metadata)
-
-                if not merged_bold_name.endswith("_desc-MergedIntermediate_bold.nii.gz"):
-                    raise NameError(
-                        f"Unexpected merged bold file name format: {merged_bold_name}"
-                    )
-                output_name = merged_bold_name.replace(
-                    "_desc-MergedIntermediate_bold.nii.gz",
-                    "_desc-dR2star_dR2starmap.nii.gz",
-                )
-                output_path = output_anat_dir / output_name
                 print(f"Running tat2 for: {output_path.name}")
 
                 cmd_template = build_cmd_template(
@@ -459,6 +479,8 @@ def main(argv: list[str] | None = None) -> int:
                     data["source_data"] = selection_metadata["source_data"]
                     data["mask_resampled"] = selection_metadata["mask_resampled"]
                     data["mask_file"] = selection_metadata["mask_file"]
+                    if "mask_resample_map" in selection_metadata:
+                        data["mask_resample_map"] = selection_metadata["mask_resample_map"]
                     write_json_with_inline_masks(sidecar_json, data)
                 if not args.keep_merged:
                     print(f"Removing merged intermediate: {merged_output_path.name}")
