@@ -60,8 +60,15 @@ def build_cmd_template(
 
 
 def main(argv: list[str] | None = None) -> int:
+
+    ######################################################################
+    ####Parse arguments #################################################
+    ######################################################################
+
     parser = get_parser()
     args = parser.parse_args(argv)
+
+    #Initially set processing flags based on method choice
     if args.method == "neglog":
         default_use_ln = True
         default_use_zscore = False
@@ -76,6 +83,9 @@ def main(argv: list[str] | None = None) -> int:
         default_voxscale = False
     else:
         parser.error(f"Unsupported method '{args.method}'")
+
+
+    #See if any processing flags are being overridden by user input
     use_ln = default_use_ln
     use_zscore = default_use_zscore
     voxscale = default_voxscale
@@ -110,6 +120,8 @@ def main(argv: list[str] | None = None) -> int:
                 f"to {args.voxscale} based on user-defined processing flags."
             )
         voxscale = args.voxscale
+
+    # Validate mutually exclusive processing flags
     if use_ln and use_zscore:
         parser.error("--use-ln and --use-zscore cannot both be true.")
     if voxscale and (use_ln or use_zscore):
@@ -121,13 +133,26 @@ def main(argv: list[str] | None = None) -> int:
     args.use_zscore = use_zscore
     args.voxscale = voxscale
 
+    #Format information that will say what space (MNI res:2, T1w, etc.) we are working in
+    space_token = args.space.replace(":", "_")
+    if (space_token == "T1w") or (space_token == "T2w"):
+        is_native = True
+    else:
+        is_native = False
+
+    ######################################################################
+    ######################################################################
+
+    #Set input/output directories
     input_dir = Path(args.input_dir)
     output_dir = Path(args.output_dir)
-    utilities.ensure_dataset_description(output_dir)
-    env = os.environ.copy()
-    if args.fd_thres is not None:
-        env["FD_THRES"] = str(args.fd_thres)
 
+    #Make dataset description if it does not already exist
+    utilities.ensure_dataset_description(output_dir)
+
+    ######################################################################
+    ####Some formatting helper functions ##################################
+    ######################################################################
     def to_bids_uri(path: Path) -> str:
         path = Path(path)
         if path.is_relative_to(output_dir):
@@ -163,6 +188,8 @@ def main(argv: list[str] | None = None) -> int:
             json_text = json_text.replace(f"\"{token}\"", mask_text)
         path.write_text(json_text + "\n")
 
+    ######################################################################
+    ####Find all the subjects/sessions to process ##########################
     participant_labels = utilities._normalize_labels(args.participant_label or [], "sub-")
     ses_labels = utilities._normalize_labels(args.ses_label or [], "ses-")
 
@@ -175,22 +202,22 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print("Sessions: all")
 
-
-    space_token = args.space.replace(":", "_")
-    if (space_token == "T1w") or (space_token == "T2w"):
-        is_native = True
-    else:
-        is_native = False
-
     subjects = utilities._discover_subjects(input_dir, participant_labels)
     print(f"Found a total of {len(subjects)} subjects that will be considered for processing.")
-    #Iterate through all possible subjects
+
+    ######################################################################
+    ####Iterate through subjects/sessions and run dR2star ##################
     for subject_idx, temp_subject in enumerate(subjects, start=1):
         print(f"Subject [{subject_idx}/{len(subjects)}]: sub-{temp_subject}")
         subject_dir = input_dir / f"sub-{temp_subject}"
         sessions = utilities._discover_sessions(subject_dir, ses_labels)
+        
         #Iterate through all possible sessions
         for temp_session in sessions:
+
+            ################################################################
+            #Logic to set up paths based on whether we have a session or not
+            ################################################################
             session_label = f"ses-{temp_session}" if temp_session else "ses-<none>"
             print(f"Session: {session_label}")
             if temp_session:
@@ -212,6 +239,8 @@ def main(argv: list[str] | None = None) -> int:
                     f"sub-{temp_subject}_*desc-confounds_regressors.tsv",
                 ]
                 output_anat_dir = output_dir / f"sub-{temp_subject}" / "anat"
+            ################################################################
+            ################################################################
 
             #Find all confound files for this subject/session. There
             #will be one confound file per fMRI acquisition.
@@ -230,18 +259,21 @@ def main(argv: list[str] | None = None) -> int:
                     if any(f"_task-{task}_" in path.name for task in task_ids)
                 ]
 
+            #Make the output anat directory if it does not already exist
             output_anat_dir.mkdir(parents=True, exist_ok=True)
             print(
                 f"Found {len(confound_files)} confound file(s) for session {session_label}."
             )
 
-            #For every confound file, try to run the dR2star pipeline.
+            #For every confound file (aka every fMRI acquisition), try to run the dR2star pipeline.
             confound_names: list[Path] = []
             bold_paths: list[Path] = []
-            mask_paths: list[Path] = []
+            mask_paths: list[Path] = [] #this will sometimes store the same mask multiple times
             mask_already_found = False
             for confound_file in confound_files:
                 confound_name = confound_file.name
+
+                #Find the corresponding preprocessed bold file for this confound file
                 bold_name = utilities._replace_confounds_suffix(
                     confound_name,
                     f"_space-{space_token}_desc-preproc_bold.nii.gz",
@@ -288,23 +320,30 @@ def main(argv: list[str] | None = None) -> int:
                             )
                             mask_already_found = True
                         else:
-                            mask_paths.append(mask_paths[-1]) #re-use the last found mask
+                            mask_path = mask_paths[-1] #re-use the last found mask
                     else:
                         raise FileNotFoundError(
                             f"--mask-input does not exist: {args.mask_input}"
                         )
+                
+                #We will keep track of all the paths for later grouping
                 confound_names.append(confound_file)
                 bold_paths.append(bold_path)
                 mask_paths.append(mask_path)
 
+            #Group the confound files/runs based on --concat inputs. This doesn't really
+            #do anything if --concat is not provided.
             group_ids, num_groups, reduced_names = utilities.group_confounds_by_entities(
                 args.concat or [],
                 confound_files,
             )
-            print(f"Grouping into {num_groups} run group(s) using --concat.")
+            if args.concat:
+                print(f"Grouping into {num_groups} run group(s) using --concat.")
 
+            #Iterate through each group of runs that needs to be merged prior to
+            #calling tat2. These consist of one or more runs that will be processed together.
             for group_idx in range(num_groups):
-                print(f"Processing group {group_idx + 1}/{num_groups}.")
+                print(f"Processing run and/or group {group_idx + 1}/{num_groups}.")
                 group_confound_files = [
                     path
                     for path, gid in zip(confound_names, group_ids)
@@ -329,6 +368,9 @@ def main(argv: list[str] | None = None) -> int:
                 ]
                 if not group_bold_paths or not group_mask_paths:
                     continue
+
+                #Figure out which volumes to keep based on confound files and user settings
+                #(such as FD/DVARS thresholds, sampling method, maxvols, etc.)
                 selections = utilities.build_volume_selection_from_confounds(
                     group_confound_files,
                     group_bold_paths,
@@ -337,11 +379,17 @@ def main(argv: list[str] | None = None) -> int:
                     sample_method=args.sample_method,
                     maxvols=args.maxvols,
                 )
+
                 print("Merge inputs and selected volume counts:")
+                #Check which run has the most volumes that will be used for tat2.
+                #If resampling is needed, priority will be given to inputs for that run.
                 for path in group_bold_paths:
-                    mask = selections.get(path, [])
-                    print(f"  - {path.name}: {sum(mask)} volume(s)")
-                best_bold_path = max(selections, key=lambda path: len(selections[path]))
+                    temporal_mask = selections.get(path, [])
+                    print(f"  - {path.name}: {sum(temporal_mask)} volume(s)")
+                best_bold_path = max(
+                    selections,
+                    key=lambda path: len(selections[path]),
+                )
                 try:
                     best_index = [
                         Path(path) for path in group_bold_paths
@@ -361,11 +409,15 @@ def main(argv: list[str] | None = None) -> int:
                     f"Selected {total_kept} total volume(s) across "
                     f"{len(group_bold_paths)} run(s)."
                 )
+
+                #Come up with the name for the merged intermediate file
                 reduced_name = group_reduced_names[0]
                 merged_bold_name = utilities._replace_confounds_suffix(
                     reduced_name,
                     f"_space-{space_token}_desc-MergedIntermediate_bold.nii.gz",
                 )
+
+                #Merge the selected volumes into a single file for tat2 processing
                 merged_output_path = output_anat_dir / merged_bold_name
                 print(f"Writing merged intermediate: {merged_output_path.name}")
                 utilities.merge_selected_volumes(
@@ -385,6 +437,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 output_path = output_anat_dir / output_name
 
+                #Check if the mask needs to be resampled to the merged bold or not
                 original_mask_path = mask_path
                 mask_path, mask_resampled = utilities.resample_mask_to_reference(
                     mask_path,
@@ -392,6 +445,10 @@ def main(argv: list[str] | None = None) -> int:
                     output_anat_dir,
                     output_base=output_path,
                 )
+
+                ########################################################################
+                #Save relevant metadata about the volume selection process##############
+                ########################################################################
                 mask_resample_map = None
                 if mask_resampled:
                     print(f"Resampled mask saved as: {mask_path.name}")
@@ -440,7 +497,14 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 write_json_with_inline_masks(merged_json_path, selection_metadata)
                 print(f"Running tat2 for: {output_path.name}")
+                ########################################################################
+                ########################################################################
 
+
+                ########################################################################
+                #Build and run the command that will be used to call tat2 for ##########
+                #this merged file. #####################################################
+                ########################################################################
                 cmd_template = build_cmd_template(
                     merged_output_path,
                     None,
@@ -452,7 +516,6 @@ def main(argv: list[str] | None = None) -> int:
                     result = subprocess.run(
                         cmd_template,
                         check=False,
-                        env=env,
                         cwd=output_anat_dir,
                     )
                 except FileNotFoundError:
@@ -462,6 +525,11 @@ def main(argv: list[str] | None = None) -> int:
                     return result.returncode
                 print("tat2 complete.")
 
+                ########################################################################
+                ########################################################################
+                #Post-process the generated JSON sidecar to include volume selection
+                #and other relevant metadata.
+                ########################################################################
                 log_json = Path(str(output_path).replace(".nii.gz", ".log.json"))
                 if log_json.exists():
                     sidecar_json = Path(str(output_path).replace(".nii.gz", ".json"))
@@ -487,6 +555,8 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"Removing merged intermediate: {merged_output_path.name}")
                     merged_output_path.unlink(missing_ok=True)
                     merged_json_path.unlink(missing_ok=True)
+
+    #Ta-da, all done!
     return 0
 
 
