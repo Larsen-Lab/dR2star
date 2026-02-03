@@ -59,7 +59,7 @@ def get_parser() -> argparse.ArgumentParser:
         metavar="OUTPUT_DIR",
         help=(
             "Root output directory. Outputs are written under "
-            "OUTPUT_DIR/sub-<label>/ses-<label>/anat/."
+            "OUTPUT_DIR/sub-<label>[/ses-<label>]/anat/."
         ),
     )
     parser.add_argument(
@@ -99,7 +99,8 @@ def get_parser() -> argparse.ArgumentParser:
         nargs="+",
         help=(
             "Optional task ID(s) to process. Provide one or more task IDs "
-            "separated by spaces (e.g., 'rest' 'nback')."
+            "separated by spaces (e.g., 'rest' 'nback'). By default all tasks 
+            "are processed."
         ),
     )
     parser.add_argument(
@@ -139,21 +140,15 @@ def get_parser() -> argparse.ArgumentParser:
         choices=["acq", "rec", "dir", "run", "echo", "part", "ce"],
         help=(
             "Concatenate volumes across the selected BIDS entities "
-            "(acq, rec, dir, run, echo, part, ce)."
+            "prior to dR2* computation. Accepts one or more of"
+            "acq, rec, dir, run, echo, part, ce."
         ),
     )
     parser.add_argument(
         "--keep-merged",
         dest="keep_merged",
         action="store_true",
-        help="Keep merged intermediate volumes and their JSON sidecars.",
-    )
-    parser.add_argument(
-        "--scale",
-        dest="scale",
-        metavar="SCALE",
-        type=float,
-        help="Scale factor passed to tat2 (-scale).",
+        help="Keep merged intermediate volumes that are fed to tat2 for dR2* computation.",
     )
     parser.add_argument(
         "--voxscale",
@@ -162,7 +157,7 @@ def get_parser() -> argparse.ArgumentParser:
         type=_parse_bool,
         help=(
             "Override method-derived voxel scaling choice. "
-            "Accepts true/false."
+            "Accepts true/false. Not recommended."
         ),
     )
     parser.add_argument(
@@ -211,7 +206,7 @@ def get_parser() -> argparse.ArgumentParser:
         type=_parse_bool,
         help=(
             "Override method-derived log transform choice. "
-            "Accepts true/false."
+            "Accepts true/false. Not recommended."
         ),
     )
     parser.add_argument(
@@ -221,7 +216,7 @@ def get_parser() -> argparse.ArgumentParser:
         type=_parse_bool,
         help=(
             "Override method-derived z-score choice. "
-            "Accepts true/false."
+            "Accepts true/false. Not recommended."
         ),
     )
     parser.add_argument(
@@ -243,19 +238,19 @@ def get_parser() -> argparse.ArgumentParser:
         "-w",
         dest="tmp_dir",
         metavar="DIR",
-        help="Working directory for intermediate files (tat2 -tmp).",
+        help="Working directory for intermediate files from tat2.",
     )
     parser.add_argument(
         "--noclean",
         dest="noclean",
         action="store_true",
-        help="Keep temporary files (tat2 -noclean).",
+        help="Keep temporary files from tat2.",
     )
     parser.add_argument(
         "--verbose",
         dest="verbose",
         action="store_true",
-        help="Enable verbose logging (tat2 -verbose).",
+        help="Enable verbose logging within tat2.",
     )
 
     return parser

@@ -28,8 +28,6 @@ def build_cmd_template(
     if censor_output_path:
         cmd.extend(["-censor_rel", str(censor_output_path)])
     cmd.extend(["-mask", str(mask_path), "-output", str(output_path)])
-    if args.scale is not None:
-        cmd.extend(["-scale", str(args.scale)])
     if not args.voxscale:
         cmd.append("-no_voxscale")
     if args.inverse:
