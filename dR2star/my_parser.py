@@ -129,7 +129,8 @@ def get_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help=(
             "Mask input: either a derivatives-like directory containing per-subject/session masks "
-            "or a single mask file in standard space to apply to all subjects."
+            "or a single mask file in standard space to apply to all subjects. This will be used to"
+            "define the brain voxels used in normalization during the dR2* computation."
         ),
     )
     parser.add_argument(
@@ -164,7 +165,7 @@ def get_parser() -> argparse.ArgumentParser:
         "--inverse",
         dest="inverse",
         action="store_true",
-        help="Output R2* (i.e., 1/T2*) instead of T2* (tat2 -inverse).",
+        help="Calculations and outputs from tat2 in R2* (i.e., 1/T2*) instead of T2*.",
     )
     parser.add_argument(
         "--time-norm",
