@@ -1,18 +1,15 @@
 dR2star
 =======
 
-dR2star is a BIDS-app style wrapper around ``tat2`` for running on fMRIPrep
-derivatives. It scans each ``func/`` directory, aggregates matching preprocessed
-BOLD runs, and writes one output per subject/session.
+dR2star is a BIDS-app style pipeline designed to calculate estimates
+of T2* based on fMRIPREP outputs.
 
 Quick start
 -----------
 
 .. code-block:: sh
 
-   dR2star /path/to/fmriprep /path/to/output participant \
-     --participant-label 01 02 \
-     --ses-label V01 V02 V03
+   dR2star /path/to/fmriprep /path/to/output participant
 
 See the :doc:`usage` page for the full CLI help and options.
 
