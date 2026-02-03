@@ -259,7 +259,6 @@ def main(argv: list[str] | None = None) -> int:
                         f"_space-{space_token}_desc-brain_mask.nii.gz",
                     )
                     mask_path = func_directory / mask_name
-                    mask_needs_resampling = False
                 else:
 
                     mask_input = Path(args.mask_input)
@@ -274,7 +273,6 @@ def main(argv: list[str] | None = None) -> int:
                                 "choose a non-native space."
                             )
                         mask_path = mask_input
-                        mask_needs_resampling = False
                     #If a directory is provided, try to find the appropriate
                     #mask file for this subject/session. Only one mask will be
                     #allowed per session.
@@ -287,10 +285,6 @@ def main(argv: list[str] | None = None) -> int:
                                 temp_session,
                                 space_token,
                             )
-                            if is_native:
-                                mask_needs_resampling = False
-                            else:
-                                mask_needs_resampling = True
                             mask_already_found = True
                         else:
                             mask_paths.append(mask_paths[-1]) #re-use the last found mask
@@ -307,11 +301,6 @@ def main(argv: list[str] | None = None) -> int:
                 confound_files,
             )
             print(f"Grouping into {num_groups} run group(s) using --concat.")
-
-            if mask_needs_resampling:
-                raise NotImplementedError(
-                    "Resampling of custom masks is not yet implemented. Choose a fMRIPREP mask or one in standard space."
-                )
 
             for group_idx in range(num_groups):
                 print(f"Processing group {group_idx + 1}/{num_groups}.")
