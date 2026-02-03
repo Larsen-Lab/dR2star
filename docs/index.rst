@@ -22,3 +22,4 @@ entities.
 
    usage
    container
+   expected_outputs
