@@ -238,6 +238,7 @@ def main(argv: list[str] | None = None) -> int:
             confound_names: list[Path] = []
             bold_paths: list[Path] = []
             mask_paths: list[Path] = []
+            mask_already_found = False
             for confound_file in confound_files:
                 confound_name = confound_file.name
                 bold_name = utilities._replace_confounds_suffix(
@@ -250,14 +251,21 @@ def main(argv: list[str] | None = None) -> int:
                         f"Missing preproc bold file for space '{args.space}': {bold_path}"
                     )
 
+                #If no mask is provided, we will grab the brain mask from
+                #the input fMRIPREP directory
                 if args.mask_input is None:
                     mask_name = utilities._replace_confounds_suffix(
                         confound_name,
                         f"_space-{space_token}_desc-brain_mask.nii.gz",
                     )
                     mask_path = func_directory / mask_name
+                    mask_needs_resampling = False
                 else:
+
                     mask_input = Path(args.mask_input)
+
+                    #If a single file is provided, use that as the mask for all runs.
+                    #This is only allowed for non-native spaces.
                     if mask_input.is_file():
                         if is_native:
                             raise ValueError(
@@ -266,10 +274,26 @@ def main(argv: list[str] | None = None) -> int:
                                 "choose a non-native space."
                             )
                         mask_path = mask_input
+                        mask_needs_resampling = False
+                    #If a directory is provided, try to find the appropriate
+                    #mask file for this subject/session. Only one mask will be
+                    #allowed per session.
                     elif mask_input.is_dir():
-                        raise NotImplementedError(
-                            "Mask derivatives directory support is not implemented yet."
-                        )
+
+                        if mask_already_found == False:
+                            mask_path = utilities.find_mask_in_directory(
+                                mask_input,
+                                temp_subject,
+                                temp_session,
+                                space_token,
+                            )
+                            if is_native:
+                                mask_needs_resampling = False
+                            else:
+                                mask_needs_resampling = True
+                            mask_already_found = True
+                        else:
+                            mask_paths.append(mask_paths[-1]) #re-use the last found mask
                     else:
                         raise FileNotFoundError(
                             f"--mask-input does not exist: {args.mask_input}"
@@ -283,6 +307,11 @@ def main(argv: list[str] | None = None) -> int:
                 confound_files,
             )
             print(f"Grouping into {num_groups} run group(s) using --concat.")
+
+            if mask_needs_resampling:
+                raise NotImplementedError(
+                    "Resampling of custom masks is not yet implemented. Choose a fMRIPREP mask or one in standard space."
+                )
 
             for group_idx in range(num_groups):
                 print(f"Processing group {group_idx + 1}/{num_groups}.")
@@ -355,6 +384,13 @@ def main(argv: list[str] | None = None) -> int:
                     needs_resampling=is_native,
                 )
                 print("Merged intermediate complete.")
+                mask_path, mask_resampled = utilities.resample_mask_to_reference(
+                    mask_path,
+                    merged_output_path,
+                    output_anat_dir,
+                )
+                if mask_resampled:
+                    print(f"Resampled mask saved as: {mask_path.name}")
 
                 selection_sources = [to_bids_uri(path) for path in group_bold_paths]
                 volume_selection: dict[str, dict[str, list[int]]] = {}
@@ -365,12 +401,13 @@ def main(argv: list[str] | None = None) -> int:
                 selection_metadata = {
                     "source_data": selection_sources,
                     "volume_selection": volume_selection,
+                    "mask_resampled": mask_resampled,
                     "selection_params": {
-                        "fd_thres": args.fd_thres,
-                        "dvars_thresh": args.dvars_thresh,
                         "sample_method": args.sample_method or "first",
                         "maxvols": args.maxvols,
                     },
+                    "fd_thres": args.fd_thres,
+                    "dvars_thresh": args.dvars_thresh,
                 }
                 merged_json_path = Path(
                     str(merged_output_path).replace(".nii.gz", ".json")
@@ -425,6 +462,7 @@ def main(argv: list[str] | None = None) -> int:
                     data["volume_selection"] = selection_metadata["volume_selection"]
                     data["selection_params"] = selection_metadata["selection_params"]
                     data["source_data"] = selection_metadata["source_data"]
+                    data["mask_resampled"] = selection_metadata["mask_resampled"]
                     write_json_with_inline_masks(sidecar_json, data)
                 if not args.keep_merged:
                     print(f"Removing merged intermediate: {merged_output_path.name}")
