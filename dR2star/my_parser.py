@@ -103,6 +103,16 @@ def get_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--dr2star-method",
+        dest="method",
+        choices=["neglog", "signalproportion", "zsignalproportion"],
+        default="neglog",
+        help=(
+            "Computation method for the dR2star map. "
+            "Choices: neglog, signalproportion, zsignalproportion."
+        ),
+    )
+    parser.add_argument(
         "--space",
         dest="space",
         metavar="SPACE",
@@ -182,12 +192,6 @@ def get_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--sample-method",
-        dest="sample_method",
-        choices=["first", "last", "random"],
-        help="Sub-sampling method for confounds-based selection across runs.",
-    )
-    parser.add_argument(
         "--maxvols",
         dest="maxvols",
         metavar="NVOL",
@@ -195,14 +199,10 @@ def get_parser() -> argparse.ArgumentParser:
         help="Limit total selected volumes across all runs in a group of concatenated files.",
     )
     parser.add_argument(
-        "--method",
-        dest="method",
-        choices=["neglog", "signalproportion", "zsignalproportion"],
-        default="neglog",
-        help=(
-            "Computation method for the dR2star map. "
-            "Choices: neglog, signalproportion, zsignalproportion."
-        ),
+        "--sample-method",
+        dest="sample_method",
+        choices=["first", "last", "random"],
+        help="Sub-sampling method for confounds-based selection across runs.",
     )
     parser.add_argument(
         "--use-ln",
