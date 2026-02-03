@@ -136,6 +136,37 @@ def resample_mask_to_reference(
     return out_path, True
 
 
+def mask_path_to_uri(
+    mask_path: Path,
+    input_dir: Path,
+    output_dir: Path,
+    mask_input: str | None,
+) -> str:
+    """Return a BIDS-style URI for a mask path."""
+    mask_path = Path(mask_path)
+    input_dir = Path(input_dir)
+    output_dir = Path(output_dir)
+
+    if mask_path.is_relative_to(output_dir):
+        return str(mask_path).replace(str(output_dir), "bids::")
+    if mask_path.is_relative_to(input_dir):
+        return str(mask_path).replace(str(input_dir), "bids:preprocessed:")
+
+    if mask_input is None:
+        return str(mask_path)
+
+    mask_input_path = Path(mask_input)
+    if mask_input_path.is_dir():
+        try:
+            rel = mask_path.relative_to(mask_input_path)
+            return f"bids:mask_dir:{rel.as_posix()}"
+        except ValueError:
+            return str(mask_path)
+    if mask_input_path.is_file():
+        return f"bids:mask_file:{mask_path}"
+    return str(mask_path)
+
+
 def ensure_dataset_description(output_dir: Path) -> Path:
     """Create a minimal BIDS derivatives dataset_description.json if missing."""
     output_dir.mkdir(parents=True, exist_ok=True)

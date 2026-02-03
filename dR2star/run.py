@@ -391,6 +391,12 @@ def main(argv: list[str] | None = None) -> int:
                     "source_data": selection_sources,
                     "volume_selection": volume_selection,
                     "mask_resampled": mask_resampled,
+                    "mask_file": utilities.mask_path_to_uri(
+                        mask_path,
+                        input_dir,
+                        output_dir,
+                        args.mask_input,
+                    ),
                     "selection_params": {
                         "sample_method": args.sample_method or "first",
                         "maxvols": args.maxvols,
@@ -452,6 +458,7 @@ def main(argv: list[str] | None = None) -> int:
                     data["selection_params"] = selection_metadata["selection_params"]
                     data["source_data"] = selection_metadata["source_data"]
                     data["mask_resampled"] = selection_metadata["mask_resampled"]
+                    data["mask_file"] = selection_metadata["mask_file"]
                     write_json_with_inline_masks(sidecar_json, data)
                 if not args.keep_merged:
                     print(f"Removing merged intermediate: {merged_output_path.name}")
