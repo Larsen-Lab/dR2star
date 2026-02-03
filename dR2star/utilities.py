@@ -136,9 +136,9 @@ def resample_mask_to_reference(
         else:
             base = output_base.stem
         if "_desc-dR2star_dR2starmap" in base:
-            base = base.replace("_desc-dR2star_dR2starmap", "_desc-dR2star_mask")
+            base = base.replace("_desc-dR2star_dR2starmap", "_desc-reference_mask")
         else:
-            base = f"{base}_desc-dR2star_mask"
+            base = f"{base}_desc-reference_mask"
         out_name = f"{base}.nii.gz"
     elif mask_path.name.endswith(".nii.gz"):
         stem = mask_path.name[:-7]
