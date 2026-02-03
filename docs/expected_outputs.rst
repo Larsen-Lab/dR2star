@@ -54,8 +54,7 @@ The ``--concat`` flag can group volumes across other BIDS entities, not just
 ``run``. Supported entities are: ``acq``, ``rec``, ``dir``, ``run``, ``echo``,
 ``part``, and ``ce``. You may pass multiple values. For example:
 
-- ``--concat run echo`` merges across runs and echoes.
-- ``--concat acq`` merges across different acquisitions.
+- ``--concat run task`` merges across runs and tasks.
 
 In general, the entities you concatenate over are removed from the output
 filename to reflect the merged group.
