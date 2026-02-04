@@ -81,15 +81,17 @@ def find_mask_in_directory(
             f"{anat_dir}. Ensure the mask directory mirrors the input layout."
         )
 
-    pattern = (
-        f"sub-{subject}{session_tag}*"
-        f"_space-{space_token}_desc-brain_mask.nii.gz"
-    )
-    matches = sorted(anat_dir.glob(pattern))
+    base = f"sub-{subject}{session_tag}*_space-{space_token}"
+    patterns = [
+        f"{base}_desc-*_mask.nii.gz",
+        f"{base}_mask.nii.gz",
+    ]
+    matches = sorted({path for pattern in patterns for path in anat_dir.glob(pattern)})
     if len(matches) != 1:
+        pattern_msg = " or ".join(f"'{pattern}'" for pattern in patterns)
         raise ValueError(
             "Expected exactly 1 mask file matching "
-            f"'{pattern}' in {anat_dir}, found {len(matches)}. "
+            f"{pattern_msg} in {anat_dir}, found {len(matches)}. "
             "Ensure there is exactly one mask per subject/session/space or "
             "rename masks to match the expected pattern."
         )

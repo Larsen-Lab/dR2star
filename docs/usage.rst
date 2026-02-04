@@ -20,9 +20,11 @@ This workflow supports three masking modes, depending on the ``--mask-input`` fl
 
 3) **Mask directory**: Provide a derivatives-like directory that mirrors the
    input layout (``sub-<id>/[ses-<id>/]anat``). The workflow searches for exactly
-   one mask per subject/session using the pattern:
+   one mask per subject/session using one of these patterns:
 
-   ``sub-<id>[_ses-<id>]*_space-<space>[_res-<res>]_desc-brain_mask.nii.gz``
+   ``sub-<id>[_ses-<id>]*_space-<space>[_res-<res>]_desc-<label>_mask.nii.gz``
+
+   ``sub-<id>[_ses-<id>]*_space-<space>[_res-<res>]_mask.nii.gz``
 
    If zero or multiple masks match, the run stops with a descriptive error. If the mask
    lives on a different grid than the merged BOLD data, it is resampled using nearest-neighbor
@@ -45,6 +47,14 @@ This workflow supports three masking modes, depending on the ``--mask-input`` fl
            ses-01/
              anat/
                sub-001_ses-01_space-MNI152NLin6Asym_res-2_desc-brain_mask.nii.gz
+
+   - **Default MNI (no desc label)**::
+
+       mask_dir/
+         sub-001/
+           ses-01/
+             anat/
+               sub-001_ses-01_space-MNI152NLin6Asym_res-2_mask.nii.gz
 
    - **T1w native space**::
 
