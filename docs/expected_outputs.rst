@@ -38,8 +38,9 @@ a single output is created for the concatenated group.
            sub-001_ses-01_task-rest_space-MNI152NLin6Asym_res-2_desc-dR2star_dR2starmap.nii.gz
            sub-001_ses-01_task-rest_space-MNI152NLin6Asym_res-2_desc-dR2star_dR2starmap.json
 
-When concatenation is active, a merged intermediate BOLD file is created. If
-``--keep-merged`` is set, you will also see:
+Whether or not concatenation is active, a merged intermediate BOLD file is created. This contains
+the fMRI volumes that will be used to create the dr2star map file, and is the result of censoring
+(high FD/DVARS) and concatenating. If ``--keep-merged`` is set, you will also see:
 
 .. code-block:: text
 
@@ -65,10 +66,9 @@ times, etc.
 
 Mask-related outputs
 --------------------
-Masking mostly affects the JSON and, in some cases, adds a resampled mask to the
-output ``anat`` folder. If a mask needs resampling to match the merged BOLD
-grid, the resampled mask is saved with a ``_desc-reference_mask`` suffix and the
-JSON records the original and resampled mask paths.
+If a mask needs resampling to match the merged BOLD grid, the resampled mask is
+saved with a ``_desc-reference_mask`` suffix and the JSON records the original and
+resampled mask paths. If resampling is not needed, no additional mask file is created.
 
 Example resampled mask:
 
@@ -104,7 +104,7 @@ Common fields include:
 - ``tat2_generated``: the raw settings and command provenance from the tat2
   step (including normalization choices and runtime commands).
 - ``confounds_file``: the confounds TSV(s) used to generate volume selections.
-- ``fd_thres`` and ``dvars_thresh``: motion thresholds used for selection.
+- ``fd_thres`` and ``dvars_thresh``: motion and signal quality thresholds used for selection.
 - ``source_data``: list of BIDS URIs for the input BOLD files used in this
   output.
 - ``volume_selection``: a mapping from each input BOLD file to its
