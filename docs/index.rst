@@ -14,8 +14,7 @@ for setup, inputs, and example workflows.
 
 The pages below cover the most common next steps:
 
-- :doc:`container` for how to pull and run the container image. This is the recommended
-   way to use dR2star.
+- :doc:`container` for how to pull and run the container image. This is the recommended way to use dR2star.
 - :doc:`usage` for CLI options and processing configuration.
 - :doc:`expected_outputs` for what results to expect and how file names change.
 
