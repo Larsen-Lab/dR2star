@@ -1,8 +1,7 @@
 Container Details
 =================
 This page covers how to find, download, and run the dR2star container using
-Apptainer. It is intended for novice users and focuses on the most common
-workflow.
+Apptainer.
 
 Find the latest container
 -------------------------
