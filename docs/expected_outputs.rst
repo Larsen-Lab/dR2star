@@ -1,5 +1,5 @@
 Expected Outputs
-----------------
+================
 This page describes what the output directory should look like and how it
 changes based on key options (concatenation, space, and masking-related outputs).
 
