@@ -18,11 +18,11 @@ def _parse_bool(value: str) -> bool:
 
 def get_parser() -> argparse.ArgumentParser:
     description = """
-    dR2star wrapper for tat2 fmriprep runs.
+    dR2star is a BIDS-App designed to generate T2* estimates, using
+    single-echo fMRI outputs from fMRIPREP.
 
     This interface mirrors a BIDS App-style CLI with three positional
-    arguments: input, output, and analysis level. Only the participant
-    analysis level is supported.
+    arguments: input, output, and analysis level.
     """
 
     epilog = """
