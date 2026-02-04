@@ -4,6 +4,20 @@ dR2star
 dR2star is a BIDS-app style pipeline designed to calculate estimates
 of T2* based on fMRIPREP outputs.
 
+Getting started
+---------------
+Before running dR2star, you will need single-echo fMRI data and a completed
+fMRIPrep run. dR2star operates on fMRIPrep outputs, so make sure your dataset
+is BIDS-formatted and has been preprocessed with fMRIPrep. If you are new to
+fMRIPrep, see the `fMRIPrep documentation <https://fmriprep.org/en/stable/>`_
+for setup, inputs, and example workflows.
+
+The pages below cover the most common next steps:
+
+- :doc:`container` for how to pull and run the container image.
+- :doc:`usage` for CLI options and processing configuration.
+- :doc:`expected_outputs` for what results to expect and how file names change.
+
 Quick start
 -----------
 
@@ -12,9 +26,6 @@ Quick start
    dR2star /path/to/fmriprep /path/to/output participant
 
 See the :doc:`usage` page for the full CLI help and options.
-
-The ``--concat`` option can be used to request concatenation across selected BIDS
-entities.
 
 .. toctree::
    :maxdepth: 1
