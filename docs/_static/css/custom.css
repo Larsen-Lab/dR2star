@@ -1,0 +1,9 @@
+/* Limit sidebar subsections to the current page only. */
+.wy-menu-vertical li.toctree-l1:not(.current) > ul {
+  display: none;
+}
+
+/* Make current-page subsections read as nested items. */
+.wy-menu-vertical li.toctree-l1.current > ul li a {
+  padding-left: 2.4em;
+}
