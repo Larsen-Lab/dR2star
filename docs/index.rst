@@ -18,18 +18,10 @@ The pages below cover the most common next steps:
 - :doc:`usage` for CLI options and processing configuration.
 - :doc:`expected_outputs` for what results to expect and how file names change.
 
-Quick start
------------
-
-.. code-block:: sh
-
-   dR2star /path/to/fmriprep /path/to/output participant
-
-See the :doc:`usage` page for the full CLI help and options.
 
 .. toctree::
    :maxdepth: 1
-   :caption: Contents:
+   :caption: Documentation Contents:
 
    Home <self>
    usage
