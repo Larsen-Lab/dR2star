@@ -9,7 +9,7 @@ Masking Details
 ---------------
 This workflow supports three masking modes, depending on the ``--mask-input`` flag:
 
-1) **No ``--mask-input`` provided**: A per-run fMRIPrep brain mask is used from
+1) **No** ``--mask-input`` **provided**: A per-run fMRIPrep brain mask is used from
    the input directory (``*_space-<space>_desc-brain_mask.nii.gz``). If multiple runs
    are to be concatenated, the mask from the run with the most thresholded volumes will
    be used for all runs.
