@@ -20,6 +20,7 @@ entities.
    :maxdepth: 1
    :caption: Contents:
 
+   Home <self>
    usage
    container
    expected_outputs
