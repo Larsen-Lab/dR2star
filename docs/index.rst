@@ -17,7 +17,7 @@ The ``--concat`` option can be used to request concatenation across selected BID
 entities.
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Contents:
 
    usage
