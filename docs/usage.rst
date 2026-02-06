@@ -13,22 +13,24 @@ The ``--dr2star-method`` option accepts the following values (case-insensitive):
 - ``nT2star``: normalized signal proportion without log/z-score transforms.
 - ``zscore``: z-score transform of the normalized signal.
 
-Masking Details
----------------
-This workflow supports three masking modes, depending on the ``--mask-input`` flag:
+Reference Mask Details
+----------------------
+This workflow supports three reference mask modes, depending on the
+``--reference-mask-input`` flag:
 
-1) **No** ``--mask-input`` **provided**: A per-run fMRIPrep brain mask is used from
-   the input directory (``*_space-<space>_desc-brain_mask.nii.gz``). If multiple runs
-   are to be concatenated, the mask from the run with the most thresholded volumes will
-   be used for all runs.
+1) **No** ``--reference-mask-input`` **provided**: A per-run fMRIPrep brain mask
+   defines the reference region and is used from the input directory
+   (``*_space-<space>_desc-brain_mask.nii.gz``). If multiple runs are to be
+   concatenated, the mask from the run with the most thresholded volumes will be
+   used for all runs.
 
-2) **Single mask file**: Provide a single mask path to apply to all runs. This
-   is only supported for non-native spaces (e.g., MNI). For native spaces
-   (T1w/T2w), a single custom mask is rejected.
+2) **Single reference mask file**: Provide one reference mask path to apply to
+   all runs. This is only supported for non-native spaces (e.g., MNI). For native
+   spaces (T1w/T2w), a single custom mask is rejected.
 
-3) **Mask directory**: Provide a derivatives-like directory that mirrors the
-   input layout (``sub-<id>/[ses-<id>/]anat``). The workflow searches for exactly
-   one mask per subject/session using one of these patterns:
+3) **Reference mask directory**: Provide a derivatives-like directory that
+   mirrors the input layout (``sub-<id>/[ses-<id>/]anat``). The workflow searches
+   for exactly one reference mask per subject/session using one of these patterns:
 
    ``sub-<id>[_ses-<id>]*_space-<space>[_res-<res>]_desc-<label>_mask.nii.gz``
 

@@ -144,13 +144,13 @@ def get_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--mask-input",
-        dest="mask_input",
+        "--reference-mask-input",
+        dest="reference_mask_input",
         metavar="PATH",
         help=(
-            "Mask input: either a derivatives-like directory containing per-subject/session masks "
-            "or a single mask file in standard space to apply to all subjects. This will be used to"
-            "define the brain voxels used in normalization during the dR2* computation."
+            "Reference mask input: either a derivatives-like directory containing per-subject/session "
+            "reference masks or a single reference mask file in standard space to apply to all subjects. "
+            "This mask defines the reference region used in normalization during dR2* computation."
         ),
     )
     parser.add_argument(

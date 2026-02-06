@@ -156,7 +156,7 @@ def mask_path_to_uri(
     mask_path: Path,
     input_dir: Path,
     output_dir: Path,
-    mask_input: str | None,
+    reference_mask_input: str | None,
 ) -> str:
     """Return a BIDS-style URI for a mask path."""
     mask_path = Path(mask_path)
@@ -170,17 +170,17 @@ def mask_path_to_uri(
         rel = mask_path.relative_to(input_dir)
         return f"bids:preprocessed:{rel.as_posix()}"
 
-    if mask_input is None:
+    if reference_mask_input is None:
         return str(mask_path)
 
-    mask_input_path = Path(mask_input)
-    if mask_input_path.is_dir():
+    reference_mask_input_path = Path(reference_mask_input)
+    if reference_mask_input_path.is_dir():
         try:
-            rel = mask_path.relative_to(mask_input_path)
+            rel = mask_path.relative_to(reference_mask_input_path)
             return f"bids:mask_dir:{rel.as_posix()}"
         except ValueError:
             return str(mask_path)
-    if mask_input_path.is_file():
+    if reference_mask_input_path.is_file():
         return f"bids:mask_file:{mask_path.as_posix().lstrip('/')}"
     return str(mask_path)
 

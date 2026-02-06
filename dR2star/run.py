@@ -287,7 +287,7 @@ def main(argv: list[str] | None = None) -> int:
 
                 #If no mask is provided, we will grab the brain mask from
                 #the input fMRIPREP directory
-                if args.mask_input is None:
+                if args.reference_mask_input is None:
                     mask_name = utilities._replace_confounds_suffix(
                         confound_name,
                         f"_space-{space_token}_desc-brain_mask.nii.gz",
@@ -295,26 +295,26 @@ def main(argv: list[str] | None = None) -> int:
                     mask_path = func_directory / mask_name
                 else:
 
-                    mask_input = Path(args.mask_input)
+                    reference_mask_input = Path(args.reference_mask_input)
 
                     #If a single file is provided, use that as the mask for all runs.
                     #This is only allowed for non-native spaces.
-                    if mask_input.is_file():
+                    if reference_mask_input.is_file():
                         if is_native:
                             raise ValueError(
                                 "Single custom mask files are only supported for "
                                 "non-native spaces. Use a derivatives mask or "
                                 "choose a non-native space."
                             )
-                        mask_path = mask_input
+                        mask_path = reference_mask_input
                     #If a directory is provided, try to find the appropriate
                     #mask file for this subject/session. Only one mask will be
                     #allowed per session.
-                    elif mask_input.is_dir():
+                    elif reference_mask_input.is_dir():
 
                         if mask_already_found == False:
                             mask_path = utilities.find_mask_in_directory(
-                                mask_input,
+                                reference_mask_input,
                                 temp_subject,
                                 temp_session,
                                 space_token,
@@ -324,7 +324,7 @@ def main(argv: list[str] | None = None) -> int:
                             mask_path = mask_paths[-1] #re-use the last found mask
                     else:
                         raise FileNotFoundError(
-                            f"--mask-input does not exist: {args.mask_input}"
+                            f"--reference-mask-input does not exist: {args.reference_mask_input}"
                         )
                 
                 #We will keep track of all the paths for later grouping
@@ -458,13 +458,13 @@ def main(argv: list[str] | None = None) -> int:
                             original_mask_path,
                             input_dir,
                             output_dir,
-                            args.mask_input,
+                            args.reference_mask_input,
                         ),
                         "resampled": utilities.mask_path_to_uri(
                             mask_path,
                             input_dir,
                             output_dir,
-                            args.mask_input,
+                            args.reference_mask_input,
                         ),
                     }
 
@@ -482,7 +482,7 @@ def main(argv: list[str] | None = None) -> int:
                         mask_path,
                         input_dir,
                         output_dir,
-                        args.mask_input,
+                        args.reference_mask_input,
                     ),
                     "selection_params": {
                         "sample_method": args.sample_method or "first",
