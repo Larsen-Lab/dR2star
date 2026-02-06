@@ -147,6 +147,11 @@ Example command:
      --space T1w \
      --reference-mask-input /reference_masks
 
+Even in native space, the anatomical mask and fMRI volumes often start in the
+same space but not the same grid. In most cases you should expect dR2star to
+resample the reference mask to the merged BOLD grid using nearest-neighbor
+interpolation and record the resampled mask path in the output JSON metadata.
+
 How dR2star Uses fMRIPrep Outputs
 ---------------------------------
 dR2star follows a consistent pattern to discover and process inputs:
@@ -164,3 +169,28 @@ dR2star follows a consistent pattern to discover and process inputs:
 6. When concatenating runs, the reference mask associated with the run that has the
    most selected volumes is used, and masks are resampled to the merged BOLD grid
    when needed using nearest-neighbor interpolation.
+
+What Happens When I Use ``--concat``
+------------------------------------
+The ``--concat`` flag groups runs across one or more BIDS entities (for example
+``run`` or ``task``) before generating a single dR2* map per group.
+
+1. dR2star identifies the runs in each group and builds censor masks from their
+   confounds files (FD/DVARS thresholds).
+2. The selected volumes from all runs in a group are merged into one intermediate
+   BOLD file.
+3. If a reference mask needs resampling, it is resampled to the merged BOLD grid
+   using nearest-neighbor interpolation. If multiple masks exist in the group,
+   the mask associated with the run that has the most selected volumes is used.
+4. If ``--maxvols`` is set, dR2star limits the number of selected volumes across
+   the group. ``--sample-method`` controls whether the first, last, or a random
+   subset of volumes is taken.
+
+To interpret the resulting metadata, see:
+
+- ``docs/expected_outputs.rst`` for a description of JSON fields like
+  ``num_volumes_initial``, ``num_volumes_post_censoring``,
+  ``num_volumes_analyzed``, ``selection_params``, ``mask_resampled``,
+  ``mask_resample_map``, and ``volume_selection``.
+- The "How dR2star Uses fMRIPrep Outputs" section above for the input discovery
+  and censoring workflow.
