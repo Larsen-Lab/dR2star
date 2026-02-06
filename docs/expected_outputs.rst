@@ -105,6 +105,9 @@ Common fields include:
   dR2star processing step (including normalization choices and runtime commands).
 - ``confounds_file``: the confounds TSV(s) used to generate volume selections.
 - ``fd_thres`` and ``dvars_thresh``: motion and signal quality thresholds used for selection.
+- ``num_volumes_initial``: total number of volumes before censoring across the merged group.
+- ``num_volumes_post_censoring``: number of volumes remaining after FD/DVARS censoring.
+- ``num_volumes_analyzed``: number of volumes analyzed after any sampling/maxvols selection.
 - ``source_data``: list of BIDS URIs for the input BOLD files used in this
   output.
 - ``volume_selection``: a mapping from each input BOLD file to its

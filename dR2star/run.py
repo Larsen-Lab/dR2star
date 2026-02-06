@@ -44,8 +44,6 @@ def build_cmd_template(
         cmd.append("-mean_vol")
     elif args.volume_norm == "median":
         cmd.append("-median_vol")
-    elif args.volume_norm == "none":
-        cmd.append("-no_vol")
     if args.tmp_dir:
         cmd.extend(["-tmp", args.tmp_dir])
     else:
@@ -339,7 +337,7 @@ def main(argv: list[str] | None = None) -> int:
 
                 #Figure out which volumes to keep based on confound files and user settings
                 #(such as FD/DVARS thresholds, sampling method, maxvols, etc.)
-                selections = utilities.build_volume_selection_from_confounds(
+                selections, volume_stats = utilities.build_volume_selection_from_confounds(
                     group_confound_files,
                     group_bold_paths,
                     fd_thres=args.fd_thres,
@@ -372,7 +370,7 @@ def main(argv: list[str] | None = None) -> int:
                         "Warning: multiple mask files found for a merged group; "
                         f"using {mask_path.name} from the run with the most volumes."
                     )
-                total_kept = sum(sum(mask) for mask in selections.values())
+                total_kept = volume_stats["num_volumes_analyzed"]
                 print(
                     f"Selected {total_kept} total volume(s) across "
                     f"{len(group_bold_paths)} run(s)."
@@ -511,6 +509,11 @@ def main(argv: list[str] | None = None) -> int:
                         args.dvars_thresh,
                     )
                     data = json.loads(sidecar_json.read_text())
+                    data["num_volumes_initial"] = volume_stats["num_volumes_initial"]
+                    data["num_volumes_post_censoring"] = volume_stats[
+                        "num_volumes_post_censoring"
+                    ]
+                    data["num_volumes_analyzed"] = volume_stats["num_volumes_analyzed"]
                     data["volume_selection"] = selection_metadata["volume_selection"]
                     data["selection_params"] = selection_metadata["selection_params"]
                     data["source_data"] = selection_metadata["source_data"]

@@ -269,7 +269,8 @@ def postprocess_dr2_json(
         return value
 
     data = _rewrite(data)
-    data.pop("censor_files", None)
+    for key in {"censor_files", "nt", "concat_nvol", "nvolx_nocen", "maxvols"}:
+        data.pop(key, None)
     if isinstance(confounds_path, list):
         confounds_value = [_rewrite(str(path)) for path in confounds_path]
     else:
@@ -426,8 +427,8 @@ def build_volume_selection_from_confounds(
     dvars_thresh: float | None,
     sample_method: str | None,
     maxvols: int | None,
-) -> dict[Path, list[int]]:
-    """Return per-NIfTI 0/1 selection masks after FD/DVARS and group sampling."""
+) -> tuple[dict[Path, list[int]], dict[str, int]]:
+    """Return per-NIfTI 0/1 selection masks and volume counts."""
     if len(confound_paths) != len(nifti_paths):
         raise ValueError(
             "confound_paths and nifti_paths must have the same number of entries."
@@ -467,6 +468,9 @@ def build_volume_selection_from_confounds(
         for vol_idx in keep_indices:
             global_indices.append((run_idx, vol_idx))
 
+    num_volumes_initial = int(sum(per_run_nvols))
+    num_volumes_post_censoring = int(sum(len(keep) for keep in per_run_keep))
+
     if maxvols is not None and maxvols > 0:
         if sample_method == "first":
             selected = global_indices[:maxvols]
@@ -481,6 +485,7 @@ def build_volume_selection_from_confounds(
                 selected = [global_indices[idx] for idx in choice_idx]
     else:
         selected = global_indices
+    num_volumes_analyzed = int(len(selected))
 
     selected_by_run: dict[int, set[int]] = {}
     for run_idx, vol_idx in selected:
@@ -494,118 +499,9 @@ def build_volume_selection_from_confounds(
             mask[vol_idx] = 1
         selections[Path(nifti_path)] = mask.tolist()
 
-    return selections
+    return selections, {
+        "num_volumes_initial": num_volumes_initial,
+        "num_volumes_post_censoring": num_volumes_post_censoring,
+        "num_volumes_analyzed": num_volumes_analyzed,
+    }
 
-
-def average_dR2star_vols(
-    entities: list[str],
-    anat_dir: Path,
-    output_dir: Path,
-) -> dict[str, list[str]]:
-    """Average dR2star volumes across selected BIDS entities."""
-    reduced_map: dict[str, list[str]] = {}
-    for path in sorted(anat_dir.glob("*dR2starmap.nii.gz")):
-        name = path.name
-        base = name[: -len(".nii.gz")]
-        reduced_base = base
-        for entity in entities:
-            reduced_base = re.sub(rf"_{re.escape(entity)}-[^_]+", "", reduced_base)
-        reduced_name = f"{reduced_base}.nii.gz"
-        reduced_map.setdefault(reduced_name, []).append(name)
-
-    import nibabel as nib
-    from nibabel import processing
-
-    for output_vol_name, input_vols in reduced_map.items():
-        if len(input_vols) == 1:
-            print(
-                "Only one volume found for the following grouping, "
-                f"skipping averaging: {output_vol_name}"
-            )
-            continue
-        else:
-            print(f"Found {len(input_vols)} volumes to average for {output_vol_name}")
-            print(f"Input volumes: {input_vols}")
-            print(f"Output volume (to be created): {output_vol_name}")
-
-            imgs = []
-            num_frames = np.zeros(len(input_vols), dtype=int)
-            for idx, vol_name in enumerate(input_vols):
-                vol_path = anat_dir / vol_name
-
-                img = nib.load(str(vol_path))
-                imgs.append(img)
-                json_path = Path(str(vol_path).replace(".nii.gz", ".json"))
-                with open(json_path, "r") as f:
-                    metadata = json.load(f)
-                concat_nvol = metadata.get("concat_nvol")
-                if concat_nvol is None:
-                    concat_nvol = metadata.get("dr2star_generated", {}).get("concat_nvol")
-                if concat_nvol is None:
-                    raise KeyError(
-                        f"Metadata key 'concat_nvol' not found in {json_path}"
-                    )
-                num_frames[idx] = concat_nvol
-            total_frames = np.sum(num_frames)
-            best_image = imgs[np.argmax(num_frames)]
-            relative_weighting = (num_frames / total_frames).tolist()
-            source_data = []
-            for vol_name in input_vols:
-                vol_path = anat_dir / vol_name
-                bids_uri = str(vol_path).replace(str(output_dir), "bids::")
-                source_data.append(bids_uri)
-
-            if ('space-T1w' in output_vol_name) or ('space-T2w' in output_vol_name):
-                best_zooms = np.array(best_image.header.get_zooms()[:3])
-                voxel_mismatch = []
-                for vol_name, temp_img in zip(input_vols, imgs):
-                    temp_zooms = np.array(temp_img.header.get_zooms()[:3])
-                    if not np.allclose(temp_zooms, best_zooms):
-                        voxel_mismatch.append((vol_name, temp_zooms))
-                if voxel_mismatch:
-                    print(
-                        "WARNING: resampling volumes with differing voxel sizes; "
-                        f"using reference zooms {best_zooms.tolist()} for {output_vol_name}."
-                    )
-                    for vol_name, temp_zooms in voxel_mismatch:
-                        print(
-                            f"  - {vol_name}: zooms={temp_zooms.tolist()}"
-                        )
-                resampled_imgs = []
-                for temp_img in imgs:
-                    if temp_img == best_image:
-                        resampled_imgs.append(temp_img)
-                    else:
-                        resampled_imgs.append(processing.resample_from_to(temp_img, best_image))
-                concat_data = np.zeros(best_image.shape)
-                total_frames = np.sum(num_frames)
-                for i, temp_img in enumerate(resampled_imgs):
-                    concat_data += temp_img.get_fdata()*num_frames[i]/total_frames
-                concat_img = nib.Nifti1Image(concat_data, best_image.affine, best_image.header)
-                output_path = anat_dir / output_vol_name
-                nib.save(concat_img, str(output_path))
-            elif ('space-MNI' in output_vol_name):
-                concat_data = np.zeros(best_image.shape)
-                total_frames = np.sum(num_frames)
-                for i, temp_img in enumerate(imgs):
-                    concat_data += temp_img.get_fdata()*num_frames[i]/total_frames
-                concat_img = nib.Nifti1Image(concat_data, best_image.affine, best_image.header)
-                output_path = anat_dir / output_vol_name
-                nib.save(concat_img, str(output_path))
-            else:
-                raise ValueError(f"Unexpected space entity in output volume name: {output_vol_name}")
-
-            json_path = Path(str(output_path).replace(".nii.gz", ".json"))
-            json_path.write_text(
-                json.dumps(
-                    {
-                        "source_data": source_data,
-                        "relative_weighting": relative_weighting,
-                    },
-                    indent=2,
-                    sort_keys=True,
-                )
-                + "\n"
-            )
-
-    return

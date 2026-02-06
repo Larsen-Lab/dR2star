@@ -170,24 +170,18 @@ def get_parser() -> argparse.ArgumentParser:
         help="Scale factor applied during normalization.",
     )
     parser.add_argument(
-        "--time-norm",
+        "--time-average-method",
         dest="time_norm",
-        choices=["none", "mean", "median"],
+        choices=["mean", "median"],
         default="median",
-        help=(
-            "Time normalization method. "
-            "Use 'none' to skip time normalization."
-        ),
+        help="Time averaging method.",
     )
     parser.add_argument(
-        "--volume-norm",
+        "--reference-average-method",
         dest="volume_norm",
-        choices=["none", "mean", "median"],
+        choices=["mean", "median"],
         default="median",
-        help=(
-            "Volume normalization method. "
-            "Use 'none' to disable volume normalization."
-        ),
+        help="Reference region averaging method.",
     )
     parser.add_argument(
         "--maxvols",
