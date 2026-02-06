@@ -188,9 +188,32 @@ The ``--concat`` flag groups runs across one or more BIDS entities (for example
 
 To interpret the resulting metadata, see:
 
-- ``docs/expected_outputs.rst`` for a description of JSON fields like
+- :doc:`expected_outputs` for a description of JSON fields like
   ``num_volumes_initial``, ``num_volumes_post_censoring``,
   ``num_volumes_analyzed``, ``selection_params``, ``mask_resampled``,
   ``mask_resample_map``, and ``volume_selection``.
 - The "How dR2star Uses fMRIPrep Outputs" section above for the input discovery
   and censoring workflow.
+
+What Happens If I Run dR2star Without Any Named Arguments
+---------------------------------------------------------
+If you run dR2star with only the positional arguments (input, output, and
+``participant``), it will try to process every discovered subject, session, and
+run independently. Because no ``--concat`` flag is provided, each run is handled
+as its own group and produces its own dR2* map and JSON sidecar.
+
+Default settings that apply in this case:
+
+- ``--dr2star-method`` defaults to ``dR2star``.
+- ``--space`` defaults to ``MNI152NLin6Asym:res-2``.
+- ``--time-average-method`` defaults to ``median``.
+- ``--reference-average-method`` defaults to ``median``.
+- ``--reference-mask-input`` is not set, so fMRIPrep brain masks in ``func/``
+  (``*_space-<space>_desc-brain_mask.nii.gz``) are used as the reference region.
+- ``--fd-thres`` defaults to ``0.3`` and ``--dvars-thresh`` is unset (disabled).
+- ``--maxvols`` is unset, so all volumes that pass censoring are used.
+
+For each run, dR2star finds the confounds file, derives the matching preprocessed
+BOLD file, builds the censor mask from FD (and DVARS if provided), and then writes
+the output map and JSON metadata under ``OUTPUT_DIR/sub-<label>/[ses-<label>]/anat``.
+See :doc:`expected_outputs` for details on the JSON fields produced.
