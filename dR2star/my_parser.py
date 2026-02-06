@@ -18,11 +18,12 @@ def _parse_bool(value: str) -> bool:
 
 def get_parser() -> argparse.ArgumentParser:
     description = """
-    dR2star wrapper for dr2 fmriprep runs.
+    dR2star is a BIDS-App designed to generate T2* estimates using
+    single-echo fMRI outputs from fMRIPrep. It wraps the dr2 processing
+    binary to generate dR2* maps.
 
     This interface mirrors a BIDS App-style CLI with three positional
-    arguments: input, output, and analysis level. Only the participant
-    analysis level is supported.
+    arguments: input, output, and analysis level.
     """
 
     epilog = """
@@ -59,7 +60,7 @@ def get_parser() -> argparse.ArgumentParser:
         metavar="OUTPUT_DIR",
         help=(
             "Root output directory. Outputs are written under "
-            "OUTPUT_DIR/sub-<label>/ses-<label>/anat/."
+            "OUTPUT_DIR/sub-<label>[/ses-<label>]/anat/."
         ),
     )
     parser.add_argument(
@@ -99,7 +100,18 @@ def get_parser() -> argparse.ArgumentParser:
         nargs="+",
         help=(
             "Optional task ID(s) to process. Provide one or more task IDs "
-            "separated by spaces (e.g., 'rest' 'nback')."
+            "separated by spaces (e.g., 'rest' 'nback'). "
+            "By default all tasks are processed."
+        ),
+    )
+    parser.add_argument(
+        "--dr2star-method",
+        dest="method",
+        choices=["neglog", "signalproportion", "zsignalproportion"],
+        default="neglog",
+        help=(
+            "Computation method for the dR2star map. "
+            "Choices: neglog, signalproportion, zsignalproportion."
         ),
     )
     parser.add_argument(
@@ -118,19 +130,27 @@ def get_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help=(
             "Mask input: either a derivatives-like directory containing per-subject/session masks "
-            "or a single mask file in standard space to apply to all subjects."
+            "or a single mask file in standard space to apply to all subjects. This will be used to"
+            "define the brain voxels used in normalization during the dR2* computation."
         ),
     )
     parser.add_argument(
-        "--average",
-        dest="average",
+        "--concat",
+        dest="concat",
         metavar="ENTITY",
         nargs="+",
         choices=["acq", "rec", "dir", "run", "echo", "part", "ce"],
         help=(
-            "Average volumes across the selected BIDS entities "
-            "(acq, rec, dir, run, echo, part, ce)."
+            "Concatenate volumes across the selected BIDS entities "
+            "prior to dR2* computation. Accepts one or more of"
+            "acq, rec, dir, run, echo, part, ce."
         ),
+    )
+    parser.add_argument(
+        "--keep-merged",
+        dest="keep_merged",
+        action="store_true",
+        help="Keep merged intermediate volumes that are fed to dr2 for dR2* computation.",
     )
     parser.add_argument(
         "--scale",
@@ -146,7 +166,7 @@ def get_parser() -> argparse.ArgumentParser:
         type=_parse_bool,
         help=(
             "Override method-derived voxel scaling choice. "
-            "Accepts true/false."
+            "Accepts true/false. Not recommended."
         ),
     )
     parser.add_argument(
@@ -176,14 +196,17 @@ def get_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--method",
-        dest="method",
-        choices=["neglog", "signalproportion", "zsignalproportion"],
-        default="neglog",
-        help=(
-            "Computation method for the dR2star map. "
-            "Choices: neglog, signalproportion, zsignalproportion."
-        ),
+        "--maxvols",
+        dest="maxvols",
+        metavar="NVOL",
+        type=int,
+        help="Limit total selected volumes across all runs in a group of concatenated files.",
+    )
+    parser.add_argument(
+        "--sample-method",
+        dest="sample_method",
+        choices=["first", "last", "random"],
+        help="Sub-sampling method for confounds-based selection across runs.",
     )
     parser.add_argument(
         "--use-ln",
@@ -192,7 +215,7 @@ def get_parser() -> argparse.ArgumentParser:
         type=_parse_bool,
         help=(
             "Override method-derived log transform choice. "
-            "Accepts true/false."
+            "Accepts true/false. Not recommended."
         ),
     )
     parser.add_argument(
@@ -202,7 +225,7 @@ def get_parser() -> argparse.ArgumentParser:
         type=_parse_bool,
         help=(
             "Override method-derived z-score choice. "
-            "Accepts true/false."
+            "Accepts true/false. Not recommended."
         ),
     )
     parser.add_argument(
@@ -211,14 +234,14 @@ def get_parser() -> argparse.ArgumentParser:
         metavar="THRESH",
         type=float,
         default=0.3,
-        help="Framewise displacement threshold for fmriprep confounds (FD_THRES env).",
+        help="Framewise displacement threshold for confounds filtering.",
     )
     parser.add_argument(
         "--dvars-thresh",
         dest="dvars_thresh",
         metavar="THRESH",
         type=float,
-        help="DVARS threshold for confounds filtering (currently unused).",
+        help="DVARS threshold for confounds filtering (omit to disable).",
     )
     parser.add_argument(
         "-w",

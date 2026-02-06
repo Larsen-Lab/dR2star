@@ -2,7 +2,7 @@ name: Build and Publish Container
 
 on:
   push:
-    branches: [main, development]
+    branches: [main, development, predevelopment]
   release:
     types: [published]
 
@@ -47,6 +47,9 @@ jobs:
           elif [ "${GITHUB_REF_NAME}" = "development" ]; then
             version="development-$(git rev-parse --short HEAD)"
             echo "tags=${image}:development" >> "$GITHUB_OUTPUT"
+          elif [ "${GITHUB_REF_NAME}" = "predevelopment" ]; then
+            version="predevelopment-$(git rev-parse --short HEAD)"
+            echo "tags=${image}:predevelopment" >> "$GITHUB_OUTPUT"
           else
             version="main-$(git rev-parse --short HEAD)"
             echo "tags=${image}:latest" >> "$GITHUB_OUTPUT"

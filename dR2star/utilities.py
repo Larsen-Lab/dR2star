@@ -9,10 +9,12 @@ import numpy as np
 
 
 def _normalize_labels(labels: list[str], prefix: str) -> list[str]:
+    """Strip a BIDS prefix from each label (e.g., sub-, ses-)."""
     return [label.removeprefix(prefix) for label in labels]
 
 
 def _discover_subjects(input_dir: Path, requested: list[str]) -> list[str]:
+    """Return subject labels from the input tree unless explicitly provided."""
     input_path = Path(input_dir)
     if requested:
         return requested
@@ -27,6 +29,7 @@ def _discover_subjects(input_dir: Path, requested: list[str]) -> list[str]:
 
 
 def _discover_sessions(subject_dir: Path, requested: list[str]) -> list[str | None]:
+    """Return session labels from a subject tree, or [None] when no sessions."""
     subject_path = Path(subject_dir)
     sessions = sorted(
         path.name.removeprefix("ses-")
@@ -49,11 +52,137 @@ def _discover_sessions(subject_dir: Path, requested: list[str]) -> list[str | No
 
 
 def _replace_confounds_suffix(filename: str, suffix: str) -> str:
+    """Swap a confounds TSV suffix for a target suffix."""
     if filename.endswith("_desc-confounds_timeseries.tsv"):
         return filename.replace("_desc-confounds_timeseries.tsv", suffix)
     if filename.endswith("_desc-confounds_regressors.tsv"):
         return filename.replace("_desc-confounds_regressors.tsv", suffix)
     raise NameError(f"Unexpected confound file name format: {filename}")
+
+
+def find_mask_in_directory(
+    mask_root: Path,
+    subject: str,
+    session: str | None,
+    space_token: str,
+) -> Path:
+    """Find a single mask file in a derivatives-like mask directory."""
+    subject_dir = mask_root / f"sub-{subject}"
+    if session:
+        anat_dir = subject_dir / f"ses-{session}" / "anat"
+        session_tag = f"_ses-{session}"
+    else:
+        anat_dir = subject_dir / "anat"
+        session_tag = ""
+
+    if not anat_dir.exists():
+        raise FileNotFoundError(
+            "Mask directory missing expected anat folder: "
+            f"{anat_dir}. Ensure the mask directory mirrors the input layout."
+        )
+
+    base = f"sub-{subject}{session_tag}*_space-{space_token}"
+    patterns = [
+        f"{base}_desc-*_mask.nii.gz",
+        f"{base}_mask.nii.gz",
+    ]
+    matches = sorted({path for pattern in patterns for path in anat_dir.glob(pattern)})
+    if len(matches) != 1:
+        pattern_msg = " or ".join(f"'{pattern}'" for pattern in patterns)
+        raise ValueError(
+            "Expected exactly 1 mask file matching "
+            f"{pattern_msg} in {anat_dir}, found {len(matches)}. "
+            "Ensure there is exactly one mask per subject/session/space or "
+            "rename masks to match the expected pattern."
+        )
+    return matches[0]
+
+
+def resample_mask_to_reference(
+    mask_path: Path,
+    reference_path: Path,
+    output_dir: Path,
+    output_base: Path | None = None,
+) -> tuple[Path, bool]:
+    """Resample a mask to a reference image grid if needed."""
+    import nibabel as nib
+    from nibabel import processing
+
+    mask_img = nib.load(str(mask_path), mmap=True)
+    ref_img = nib.load(str(reference_path), mmap=True)
+
+    if mask_img.ndim > 3:
+        if mask_img.shape[3] != 1:
+            raise ValueError(
+                f"Mask {mask_path} must be 3D or single-volume 4D, "
+                f"got shape {mask_img.shape}."
+            )
+        mask_img = mask_img.slicer[..., 0]
+    if ref_img.ndim > 3:
+        ref_img = ref_img.slicer[..., 0]
+
+    same_shape = mask_img.shape[:3] == ref_img.shape[:3]
+    same_affine = np.allclose(mask_img.affine, ref_img.affine)
+    if same_shape and same_affine:
+        return mask_path, False
+
+    resampled = processing.resample_from_to(mask_img, ref_img, order=0)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    if output_base is not None:
+        base_name = output_base.name
+        if base_name.endswith(".nii.gz"):
+            base = base_name[:-7]
+        elif base_name.endswith(".nii"):
+            base = base_name[:-4]
+        else:
+            base = output_base.stem
+        if "_desc-dR2star_dR2starmap" in base:
+            base = base.replace("_desc-dR2star_dR2starmap", "_desc-reference_mask")
+        else:
+            base = f"{base}_desc-reference_mask"
+        out_name = f"{base}.nii.gz"
+    elif mask_path.name.endswith(".nii.gz"):
+        stem = mask_path.name[:-7]
+        out_name = f"{stem}_resampled.nii.gz"
+    else:
+        out_name = f"{mask_path.stem}_resampled{mask_path.suffix}"
+    out_path = output_dir / out_name
+    nib.save(resampled, str(out_path))
+    return out_path, True
+
+
+def mask_path_to_uri(
+    mask_path: Path,
+    input_dir: Path,
+    output_dir: Path,
+    mask_input: str | None,
+) -> str:
+    """Return a BIDS-style URI for a mask path."""
+    mask_path = Path(mask_path)
+    input_dir = Path(input_dir)
+    output_dir = Path(output_dir)
+
+    if mask_path.is_relative_to(output_dir):
+        rel = mask_path.relative_to(output_dir)
+        return f"bids::{rel.as_posix()}"
+    if mask_path.is_relative_to(input_dir):
+        rel = mask_path.relative_to(input_dir)
+        return f"bids:preprocessed:{rel.as_posix()}"
+
+    if mask_input is None:
+        return str(mask_path)
+
+    mask_input_path = Path(mask_input)
+    if mask_input_path.is_dir():
+        try:
+            rel = mask_path.relative_to(mask_input_path)
+            return f"bids:mask_dir:{rel.as_posix()}"
+        except ValueError:
+            return str(mask_path)
+    if mask_input_path.is_file():
+        return f"bids:mask_file:{mask_path.as_posix().lstrip('/')}"
+    return str(mask_path)
 
 
 def ensure_dataset_description(output_dir: Path) -> Path:
@@ -104,7 +233,7 @@ def postprocess_dr2_json(
     json_path: Path,
     input_dir: Path,
     output_dir: Path,
-    confounds_path: Path,
+    confounds_path: Path | list[Path],
     fd_thres: float | None,
     dvars_thresh: float | None,
 ) -> None:
@@ -114,16 +243,29 @@ def postprocess_dr2_json(
         str(input_dir): "bids:preprocessed:",
         str(output_dir): "bids::",
     }
+    skip_keys = {"cmd", "collapse_cmd", "roistats_cmds", "volume_norm_cmds"}
 
-    def _rewrite(value):
-        if isinstance(value, str):
-            for src, dst in replacements.items():
-                value = value.replace(src, dst)
+    def _rewrite_str(value: str) -> str:
+        if value.startswith("bids:"):
             return value
+        for src, dst in replacements.items():
+            src_path = Path(src)
+            try:
+                rel = Path(value).relative_to(src_path)
+            except ValueError:
+                continue
+            return f"{dst}{rel.as_posix()}"
+        return value
+
+    def _rewrite(value, key: str | None = None):
+        if key in skip_keys:
+            return value
+        if isinstance(value, str):
+            return _rewrite_str(value)
         if isinstance(value, list):
             return [_rewrite(item) for item in value]
         if isinstance(value, dict):
-            return {key: _rewrite(item) for key, item in value.items()}
+            return {k: _rewrite(v, k) for k, v in value.items()}
         return value
 
     data = _rewrite(data)
@@ -181,12 +323,186 @@ def confounds_to_censor_file(
     return
 
 
+def group_confounds_by_entities(
+    entities: list[str],
+    confound_paths: list[Path | str],
+) -> tuple[list[int], int, list[str]]:
+    """Return aligned group IDs, group count, and reduced names after entity removal."""
+    group_ids: list[int] = []
+    reduced_names: list[str] = []
+    key_to_id: dict[str, int] = {}
+    for path in confound_paths:
+        name = Path(path).name
+        reduced_name = name
+        for entity in entities:
+            reduced_name = re.sub(rf"_{re.escape(entity)}-[^_]+", "", reduced_name)
+        if reduced_name not in key_to_id:
+            key_to_id[reduced_name] = len(key_to_id)
+        group_ids.append(key_to_id[reduced_name])
+        reduced_names.append(reduced_name)
+    return group_ids, len(key_to_id), reduced_names
+
+
+def merge_selected_volumes(
+    volumes_by_path: dict[Path | str, list[int]],
+    output_path: Path | str,
+    needs_resampling: bool,
+) -> Path:
+    """Merge selected volumes into one NIfTI, resampling to the largest selection."""
+    import nibabel as nib
+    from nibabel import processing
+
+    if not volumes_by_path:
+        raise ValueError("volumes_by_path is empty.")
+
+    selected_imgs: list[nib.Nifti1Image] = []
+    selected_counts: list[int] = []
+    for path, keep_mask in volumes_by_path.items():
+        img_path = Path(path)
+        img = nib.load(str(img_path), mmap=True)
+        nvols = img.shape[3] if img.ndim > 3 else 1
+        if len(keep_mask) != nvols:
+            raise ValueError(
+                f"Expected {nvols} mask entries for {img_path}, got {len(keep_mask)}."
+            )
+        keep_idxs = [i for i, flag in enumerate(keep_mask) if int(flag) == 1]
+        if not keep_idxs:
+            continue
+        if img.ndim == 3:
+            if keep_idxs != [0]:
+                raise ValueError(
+                    f"Invalid mask for 3D image {img_path}: {keep_idxs}."
+                )
+            subset_img = img
+        else:
+            keep_idxs = sorted(keep_idxs)
+            if len(keep_idxs) == 1:
+                subset_img = img.slicer[..., keep_idxs[0] : keep_idxs[0] + 1]
+            elif keep_idxs == list(range(keep_idxs[0], keep_idxs[-1] + 1)):
+                subset_img = img.slicer[..., keep_idxs[0] : keep_idxs[-1] + 1]
+            else:
+                subset_img = nib.funcs.concat_images(
+                    [img.slicer[..., idx : idx + 1] for idx in keep_idxs],
+                    axis=3,
+                )
+        selected_imgs.append(subset_img)
+        selected_counts.append(len(keep_idxs))
+
+    if not selected_imgs:
+        raise ValueError("No volumes selected from any input image.")
+
+    ref_idx = int(np.argmax(selected_counts))
+    ref_img = selected_imgs[ref_idx]
+
+    if needs_resampling:
+        resampled_imgs: list[nib.Nifti1Image] = []
+        for idx, temp_img in enumerate(selected_imgs):
+            if idx == ref_idx:
+                resampled_imgs.append(temp_img)
+            else:
+                resampled_imgs.append(processing.resample_from_to(temp_img, ref_img))
+        selected_imgs = resampled_imgs
+
+    if selected_imgs[0].ndim == 3:
+        selected_imgs = [
+            nib.Nifti1Image(
+                np.expand_dims(np.asanyarray(img.dataobj), axis=3),
+                img.affine,
+                img.header,
+            )
+            for img in selected_imgs
+        ]
+    merged_img = nib.funcs.concat_images(selected_imgs, axis=3)
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    nib.save(merged_img, str(output_path))
+    return output_path
+
+
+def build_volume_selection_from_confounds(
+    confound_paths: list[Path | str],
+    nifti_paths: list[Path | str],
+    fd_thres: float,
+    dvars_thresh: float | None,
+    sample_method: str | None,
+    maxvols: int | None,
+) -> dict[Path, list[int]]:
+    """Return per-NIfTI 0/1 selection masks after FD/DVARS and group sampling."""
+    if len(confound_paths) != len(nifti_paths):
+        raise ValueError(
+            "confound_paths and nifti_paths must have the same number of entries."
+        )
+    if sample_method is None:
+        sample_method = "first"
+    if sample_method not in {"first", "last", "random"}:
+        raise ValueError(f"Unsupported sample_method '{sample_method}'.")
+
+    per_run_keep: list[list[int]] = []
+    per_run_nvols: list[int] = []
+
+    for confound_path in confound_paths:
+        confound_path = Path(confound_path)
+        confounds = pd.read_csv(confound_path, sep="\t")
+        fd = confounds.get("framewise_displacement")
+        if fd is None:
+            raise ValueError(
+                f"Framewise displacement column not found in {confound_path}."
+            )
+
+        censor = np.ones(len(confounds), dtype=int)
+        censor[fd > fd_thres] = 0
+
+        if dvars_thresh is not None:
+            dvars = confounds.get("dvars")
+            if dvars is None:
+                raise ValueError(f"DVARS column not found in {confound_path}.")
+            censor[dvars > dvars_thresh] = 0
+
+        keep_indices = np.where(censor == 1)[0].tolist()
+        per_run_keep.append(keep_indices)
+        per_run_nvols.append(len(censor))
+
+    global_indices: list[tuple[int, int]] = []
+    for run_idx, keep_indices in enumerate(per_run_keep):
+        for vol_idx in keep_indices:
+            global_indices.append((run_idx, vol_idx))
+
+    if maxvols is not None and maxvols > 0:
+        if sample_method == "first":
+            selected = global_indices[:maxvols]
+        elif sample_method == "last":
+            selected = global_indices[-maxvols:]
+        else:
+            rng = np.random.default_rng()
+            if maxvols >= len(global_indices):
+                selected = global_indices
+            else:
+                choice_idx = rng.choice(len(global_indices), size=maxvols, replace=False)
+                selected = [global_indices[idx] for idx in choice_idx]
+    else:
+        selected = global_indices
+
+    selected_by_run: dict[int, set[int]] = {}
+    for run_idx, vol_idx in selected:
+        selected_by_run.setdefault(run_idx, set()).add(vol_idx)
+
+    selections: dict[Path, list[int]] = {}
+    for run_idx, nifti_path in enumerate(nifti_paths):
+        nvols = per_run_nvols[run_idx]
+        mask = np.zeros(nvols, dtype=int)
+        for vol_idx in selected_by_run.get(run_idx, set()):
+            mask[vol_idx] = 1
+        selections[Path(nifti_path)] = mask.tolist()
+
+    return selections
+
+
 def average_dR2star_vols(
     entities: list[str],
     anat_dir: Path,
     output_dir: Path,
 ) -> dict[str, list[str]]:
-    """Group dR2star volumes by removing selected BIDS entities from filenames."""
+    """Average dR2star volumes across selected BIDS entities."""
     reduced_map: dict[str, list[str]] = {}
     for path in sorted(anat_dir.glob("*dR2starmap.nii.gz")):
         name = path.name
