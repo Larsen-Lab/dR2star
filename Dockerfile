@@ -33,8 +33,8 @@ RUN python3 -m pip install --no-cache-dir \
   nibabel==5.3.2
 
 
-COPY tat2 /usr/bin/
+COPY dr2 /usr/bin/
 COPY dR2star /opt/dR2star/dR2star
 ENV PYTHONPATH=/opt/dR2star
-RUN chmod +x /usr/bin/tat2
+RUN chmod +x /usr/bin/dr2
 ENTRYPOINT ["python3", "-m", "dR2star.run"]

@@ -84,10 +84,7 @@ def ensure_dataset_description(output_dir: Path) -> Path:
         if isinstance(entry, dict) and entry.get("Name") in ("dr2star", "dR2star"):
             entry["Name"] = "dR2star"
             entry["Version"] = version
-            if entry.get("Description") == "dr2star processing using tat2":
-                entry["Description"] = "dR2star processing using tat2"
-            else:
-                entry.setdefault("Description", "dR2star processing using tat2")
+            entry.setdefault("Description", "dR2star processing using dr2")
             updated = True
             break
     if not updated:
@@ -95,7 +92,7 @@ def ensure_dataset_description(output_dir: Path) -> Path:
             {
                 "Name": "dR2star",
                 "Version": version,
-                "Description": "dR2star processing using tat2",
+                "Description": "dR2star processing using dr2",
             }
         )
     description["GeneratedBy"] = generated_by
@@ -103,7 +100,7 @@ def ensure_dataset_description(output_dir: Path) -> Path:
     return desc_path
 
 
-def postprocess_tat2_json(
+def postprocess_dr2_json(
     json_path: Path,
     input_dir: Path,
     output_dir: Path,
@@ -111,7 +108,7 @@ def postprocess_tat2_json(
     fd_thres: float | None,
     dvars_thresh: float | None,
 ) -> None:
-    """Normalize paths in a tat2 JSON and add additional metadata."""
+    """Normalize paths in a dr2 JSON and add additional metadata."""
     data = json.loads(json_path.read_text())
     replacements = {
         str(input_dir): "bids:preprocessed:",
@@ -130,11 +127,18 @@ def postprocess_tat2_json(
         return value
 
     data = _rewrite(data)
-    confounds_value = _rewrite(str(confounds_path))
-    data["confounds_file"] = confounds_value
-    data["fd_thres"] = fd_thres
-    data["dvars_thresh"] = dvars_thresh
-    json_path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+    data.pop("censor_files", None)
+    if isinstance(confounds_path, list):
+        confounds_value = [_rewrite(str(path)) for path in confounds_path]
+    else:
+        confounds_value = _rewrite(str(confounds_path))
+    payload = {
+        "dr2star_generated": data,
+        "confounds_file": confounds_value,
+        "fd_thres": fd_thres,
+        "dvars_thresh": dvars_thresh,
+    }
+    json_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 def confounds_to_censor_file(
     confounds_tsv: str,
@@ -218,12 +222,14 @@ def average_dR2star_vols(
                 json_path = Path(str(vol_path).replace(".nii.gz", ".json"))
                 with open(json_path, "r") as f:
                     metadata = json.load(f)
-                try:
-                    num_frames[idx] = metadata["concat_nvol"]
-                except KeyError:
+                concat_nvol = metadata.get("concat_nvol")
+                if concat_nvol is None:
+                    concat_nvol = metadata.get("dr2star_generated", {}).get("concat_nvol")
+                if concat_nvol is None:
                     raise KeyError(
                         f"Metadata key 'concat_nvol' not found in {json_path}"
                     )
+                num_frames[idx] = concat_nvol
             total_frames = np.sum(num_frames)
             best_image = imgs[np.argmax(num_frames)]
             relative_weighting = (num_frames / total_frames).tolist()

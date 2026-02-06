@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""BIDS-style wrapper to run tat2 with the fmriprep workflow."""
+"""BIDS-style wrapper to run dr2 with the fmriprep workflow."""
 
 from __future__ import annotations
 
@@ -18,9 +18,9 @@ def build_cmd_template(
     output_path: Path,
     args,
 ) -> list[str]:
-    """Build a minimal tat2 command for a single run."""
+    """Build a minimal dr2 command for a single run."""
     cmd = [
-        "tat2",
+        "dr2",
         str(bold_path),
         "-censor_rel",
         str(censor_output_path),
@@ -116,7 +116,7 @@ def main(argv: list[str] | None = None) -> int:
     if voxscale and (use_ln or use_zscore):
         parser.error(
             "--voxscale cannot be combined with --use-ln/--use-zscore or a method "
-            "that implies them; tat2 requires -no_voxscale for those transforms."
+            "that implies them; dr2 requires -no_voxscale for those transforms."
         )
     args.use_ln = use_ln
     args.use_zscore = use_zscore
@@ -260,7 +260,7 @@ def main(argv: list[str] | None = None) -> int:
                 try:
                     result = subprocess.run(cmd_template, check=False, env=env)
                 except FileNotFoundError:
-                    parser.error("'tat2' not found on PATH. Ensure it is installed or in PATH.")
+                    parser.error("'dr2' not found on PATH. Ensure it is installed or in PATH.")
 
                 if result.returncode != 0:
                     return result.returncode
@@ -269,7 +269,7 @@ def main(argv: list[str] | None = None) -> int:
                 if log_json.exists():
                     sidecar_json = Path(str(output_path).replace(".nii.gz", ".json"))
                     log_json.replace(sidecar_json)
-                    utilities.postprocess_tat2_json(
+                    utilities.postprocess_dr2_json(
                         sidecar_json,
                         input_dir,
                         output_dir,

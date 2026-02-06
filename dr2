@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tat2: time-averaged T2*
+# dr2: time-averaged T2*
 #  glue for 3dcalc 3dTcat and 3dTstat (+ 3dNotes)
 #  to compute time average T2
 # SPDX-License-Identifier: AGPL-3.0-or-later
@@ -9,12 +9,12 @@ t2_inv=0                       # before volnorm (3dcalc, 3dTstat)
 MASK_REL="subject_mask.nii.gz" # 3dROIstats: use to calculate volnorm.1D
 MASK=""                        #  "
 MKMASK=0                       #  "
-volnorm_opt="-nzmedian"        # 3dcalc: run_tat2.nii.gz (vol normalized)
+volnorm_opt="-nzmedian"        # 3dcalc: run_dr2.nii.gz (vol normalized)
 SCALE=1000                     #  "
 vox_scale=1                    #  "
 use_zscore=0                   #  "
 use_ln=0                       #  "      (added 20240719)
-MAXVOLS=-1                     #  "      truncate how many volumes are in run_tat2.nii.gz
+MAXVOLS=-1                     #  "      truncate how many volumes are in run_dr2.nii.gz
 censor_rel=""                  # 3dTcat: truncate input
 MAXVOLSTOTAL=-1                #  "      truncate how many volumes are ultimately averaged.
 IDX_SAMPLE_METHOD="first"      # how to sample indexes (first, last, random) when MAXVOLS*
@@ -24,10 +24,10 @@ FD_THRES=${FD_THRES:-0.3}      # framewise displacement applied to confounds_tim
 # GNU Parallel default options for per func/ files (added for -fmriprep, 20260102)
 PARALEL_OPTS=${PARALEL_OPTS:-"--eta --progress --total-jobs -P50%"}
 
-OUTPUT=tat2star.nii.gz
+OUTPUT=dr2star.nii.gz
 TMPLOCATION=/tmp
 CLEAN=1
-TMPD="" # will be folder specific to single invocation of tat2. removed at the end
+TMPD="" # will be folder specific to single invocation of dr2. removed at the end
 WRITE_JSON_LOG=1
 
 # run through fmriprep. -fmriprep option added 20260102
@@ -39,7 +39,7 @@ declare -a GLOBFILES
 
 filedesc_whichvol=""
 
-TAT2_VER="1.0.0.20260102-fmriprep"
+DR2_VER="1.0.0.20260102-fmriprep"
 # 1.0.0.20260102
 #   add -fmriprep option
 # 20240719-calc_ln+BUGFIX-no_vol
@@ -66,7 +66,7 @@ TAT2_VER="1.0.0.20260102-fmriprep"
 usage(){
   cat <<-HEREDOC
 USAGE
-    tat2 '/paths/to/*/t2.nii.gz' [ -mask_rel $MASK_REL | -mask_rel s/_bold.nii.gz/_bold_mask.nii.gz/ | -mask /the/only/mask.nii.gz | -mkmask]  [-output $OUTPUT] [-scale $SCALE]  [-censor_rel relative/censor.1D | -censor_rel s/epi/censor/] [-median_time|-mean_time]  [-median_vol|-mean_vol|-no_vol] [-calc_zscore|-calc_ln] [-no_voxscale] [-inverse] [-noclean] [-verbose] [-tmp $TMPLOCATION]
+    dr2 '/paths/to/*/t2.nii.gz' [ -mask_rel $MASK_REL | -mask_rel s/_bold.nii.gz/_bold_mask.nii.gz/ | -mask /the/only/mask.nii.gz | -mkmask]  [-output $OUTPUT] [-scale $SCALE]  [-censor_rel relative/censor.1D | -censor_rel s/epi/censor/] [-median_time|-mean_time]  [-median_vol|-mean_vol|-no_vol] [-calc_zscore|-calc_ln] [-no_voxscale] [-inverse] [-noclean] [-verbose] [-tmp $TMPLOCATION]
 
 SYNOPSIS
   calculates time averaged T2* like:
@@ -86,8 +86,8 @@ OPTIONS (in order of relevance)
     Will overwrite -censor_rel and -mask_rel options to new defaults.
 
     To change new defaults, specify modifications after -fmriprep option
-    NB. without -fmriprep, tat2 creates a single file from all inputs
-        with -fmriprep, tat2start.nii.gz file PER func/ directory
+    NB. without -fmriprep, dr2 creates a single file from all inputs
+        with -fmriprep, dr2start.nii.gz file PER func/ directory
 
    GNU Parallel will be used when avalaible to parallelize.
    Parameters set with environment variable
@@ -225,7 +225,7 @@ collapse_seq_idx(){
 parse_args(){
    # keep args around for 3dNotes history
    allargs="$*"    # single long string, into json/log
-   ALLARGS_=("$@") # used to forward tat2 when -fmriprep
+   ALLARGS_=("$@") # used to forward dr2 when -fmriprep
 
 
    # read in any arguments/paramaters
@@ -334,7 +334,7 @@ update_with_censor(){
    local tmpd=${1:-$TMPLOCATION} # only used if fmrirep/rewriting
    filedesc_whichvol=""
    readonly censor_rel
-   local idxs nkeep tat2inputfile
+   local idxs nkeep dr2inputfile
    # update 'input' and 'runoutput'
    # censor input
    if [ -n "$censor_rel" ]; then
@@ -361,7 +361,7 @@ update_with_censor(){
       # truncate input
       # previous used 3dTcat to truncation. but 3dROIstats and 3dcalc understand '[$index]' notation
       # so no need to make another (potentially large) file
-      tat2inputfile=$input
+      dr2inputfile=$input
       input="$input[$idxs]"
 
       # > ** ERROR: (The longest filename allowed in AFNI is 5095 characters)
@@ -370,7 +370,7 @@ update_with_censor(){
       # should remove conditional (>5k) so if this caues a bug
       #   it will show up everywhere and will be tested (?)
       [ ${#input} -ge 5095 ] &&
-         input="$tat2inputfile[$(echo $idxs | collapse_seq_idx)]"
+         input="$dr2inputfile[$(echo $idxs | collapse_seq_idx)]"
    fi
 
    return 0
@@ -418,7 +418,7 @@ one_ta(){
    #  t2_inv, volnorm_opt, use_zscore, SCALE, vox_scale, all_numvox
    #
    # makes $runoutput and $volnorm_1D
-   #  looks like ${cnt}_tat2.nii.gz or $tmpd/${cnt}_keep$n_tat2.nii.gz if censoring
+   #  looks like ${cnt}_dr2.nii.gz or $tmpd/${cnt}_keep$n_dr2.nii.gz if censoring
    local cnt="$1"; shift
    local input="$1"; shift
    local tmpd="$1"; shift
@@ -438,14 +438,14 @@ one_ta(){
    censor_file="" # updated version of '$censor_rel' if used
    update_with_censor "$tmpd"
 
-   # must match *_tat2.nii.gz to be picked up by 3dTstat at the end
-   runoutput="$tmpd/${cnt}${filedesc_whichvol}${filedesc_volnorm}_tat2.nii.gz"
+   # must match *_dr2.nii.gz to be picked up by 3dTstat at the end
+   runoutput="$tmpd/${cnt}${filedesc_whichvol}${filedesc_volnorm}_dr2.nii.gz"
 
    # calc number of voxels
    numvox=$(3dBrickStat -count -non-zero $mask|sed 's/[\t ]//g')
 
    # verbose
-   msg "tat2: $input -> $runoutput"
+   msg "dr2: $input -> $runoutput"
    volnorm_1D=$tmpd/${cnt}${filedesc_volnorm}.1D
    vol_sd=$tmpd/${cnt}_sd.1D
 
@@ -502,13 +502,13 @@ json_list(){
    echo -n "[${list}]"
 }
 
-_tat2(){
+_dr2(){
    # would see this message on arg check unless running w/-fmriprep
    test -r "$OUTPUT" &&
       msg "# have $OUTPUT. rm '$OUTPUT' # to redo" &&
       return 0
 
-   TMPD=$(mktemp -d $TMPLOCATION/tat2star_XXXX)
+   TMPD=$(mktemp -d $TMPLOCATION/dr2star_XXXX)
    cnt=0
    volcount=0
    all_numvox=""  # will be populated with each subjectmask (csv)
@@ -524,7 +524,7 @@ _tat2(){
 
    for input in ${GLOBFILES[@]}; do
       one_ta $cnt "$input" "$TMPD"
-      # now have e.g. 0_keep200_tat2.nii.gz
+      # now have e.g. 0_keep200_dr2.nii.gz
       prev_cnt=$cnt
       let ++cnt
       # track total uncensored volume count
@@ -532,7 +532,7 @@ _tat2(){
 
       # we can stop processing runs if we have enough
       if [ $MAXVOLSTOTAL -gt 0 -a $IDX_SAMPLE_METHOD == "first" ]; then
-         this_run=$TMPD/${prev_cnt}_*tat2.nii.gz
+         this_run=$TMPD/${prev_cnt}_*dr2.nii.gz
          n_vol_run=$(3dinfo -nt $this_run)
          let volcount+=$n_vol_run
          [ $volcount -lt $MAXVOLSTOTAL ] && continue
@@ -541,17 +541,17 @@ _tat2(){
          break
       fi
    done
-   actual_nfiles=$(ls $TMPD/*_tat2.nii.gz|wc -l)
+   actual_nfiles=$(ls $TMPD/*_dr2.nii.gz|wc -l)
 
    [ $actual_nfiles -ne $nfiles ] && err "ERROR: create $actual_nfiles/$nfiles ($cnt iterations) in $TMPD"
 
-   msg "tat2star $OUTPUT"
+   msg "dr2star $OUTPUT"
    # combine all the normalized runs if we need to
    if [ $nfiles -gt 1 ]; then
-      3dTcat -overwrite -prefix $TMPD/tat2_all.nii.gz $TMPD/*_tat2.nii.gz
-      concated_file=$TMPD/tat2_all.nii.gz
+      3dTcat -overwrite -prefix $TMPD/dr2_all.nii.gz $TMPD/*_dr2.nii.gz
+      concated_file=$TMPD/dr2_all.nii.gz
    else
-      concated_file=$TMPD/*_tat2.nii.gz
+      concated_file=$TMPD/*_dr2.nii.gz
    fi
 
    # truncate them
@@ -586,21 +586,21 @@ _tat2(){
 
    ### HISTORY/PROVENANCE
    # 1D create file provenance is not tracked and tmp files will be remove.
-   # put final tat2 file. also in log.json
+   # put final dr2 file. also in log.json
    3dNotes -h "$all_roistats" "$OUTPUT"
 
-   all_nts="$(3dinfo -nt $TMPD/*_tat2.nii.gz|tr '\n' ',')"
+   all_nts="$(3dinfo -nt $TMPD/*_dr2.nii.gz|tr '\n' ',')"
 
    [ $vox_scale -eq 0 ] && scale_msg="SCALE=NA" || scale_msg="SCALE=$SCALE"
 
-   # use gitver (lncdtool) when on path and tat2 tracked in git repo (e.g. in development)
-   # otherwise use hardcoded TAT2_VER (e.g. copied just tat2/no repo; or using from system package)
+   # use gitver (lncdtool) when on path and dr2 tracked in git repo (e.g. in development)
+   # otherwise use hardcoded DR2_VER (e.g. copied just dr2/no repo; or using from system package)
    if command -v gitver >/dev/null 2>&1; then
       gitver="$(gitver "$0" 2>/dev/null || :)"
    else
       gitver=""
    fi
-   [[ -z "$gitver" || "$gitver" =~ :NA$ ]] && gitver=$TAT2_VER
+   [[ -z "$gitver" || "$gitver" =~ :NA$ ]] && gitver=$DR2_VER
 
    note_msg="$0 $allargs # $(pwd); $scale_msg, nvoxes=$all_numvox, censors=$all_censors; nt=$all_nts; vol:$volnorm_opt, time:$tnorm_opt; $MAXVOLSTOTAL/$concat_nvol/$nvols_nocen used/not-cen/total nvols; $cnt/${#GLOBFILES[@]} files; $gitver"
    3dNotes -h "$note_msg" "$OUTPUT"
@@ -620,7 +620,7 @@ _tat2(){
 	 "nvox": [${all_numvox::-1}],`# -1 to remove trailing comma`
 	 "censor_files": [${all_censors::-1}],
 	 "nt": [${all_nts::-1}],
-	 "tat2_input": $(json_list $TMPD/*_tat2.nii.gz),
+	 "dr2_input": $(json_list $TMPD/*_dr2.nii.gz),
 	 "raw_inputs": $(json_list ${GLOBFILES[@]}),
 	 "n_raw_used": $cnt,
 	 "output": "$OUTPUT",
@@ -628,7 +628,7 @@ _tat2(){
 	 "nvolx_nocen": $nvols_nocen,
 	 "scale": "$SCALE",
 	 "git": "$gitver",
-	 "tat2_ver": "$TAT2_VER",
+	 "dr2_ver": "$DR2_VER",
 	 "use_inverse": "$t2_inv",
 	 "use_scale": "$vox_scale",
 	 "maxvols": $MAXVOLSTOTAL
@@ -661,18 +661,18 @@ _fmriprep_loop(){
 
    if command -v env_parallel >/dev/null && [ -n "$PARALEL_OPTS" ]; then
       export FMRIPREP_TASK_PATTERN FMRIPREP_DERIV_ROOT
-      export -f _tat2_fmriprep
-      parallel $PARALEL_OPTS -N1 _tat2_fmriprep {1} -censor_rel "'$censor_rel'" -mask_rel "'$MASK_REL'" "${noprepargs[@]}" ::: "${bold_dirs[@]}"
+      export -f _dr2_fmriprep
+      parallel $PARALEL_OPTS -N1 _dr2_fmriprep {1} -censor_rel "'$censor_rel'" -mask_rel "'$MASK_REL'" "${noprepargs[@]}" ::: "${bold_dirs[@]}"
    else
       echo "WARNING: not parallelizing. install GNU Parallel to use mutliple cores." >&2
       for session_func in "${bold_dirs[@]}"; do
          msg "starting $session_func"
          # continue across failures -- don't want one bad session to bring it all down
-         _tat2_fmriprep "$session_func" "${noprepargs[@]}" || :
+         _dr2_fmriprep "$session_func" "${noprepargs[@]}" || :
       done
    fi
 }
-_tat2_fmriprep(){
+_dr2_fmriprep(){
    # expect to be called by _fmriprep_loop after parse_args sets all bug GLOBFILES
    local session_func=${1:?expect fmriprep func/ directory}; shift;
    mapfile -t GLOBFILES < <(find $session_func -iname "$FMRIPREP_TASK_PATTERN" -not -iname '*echo-*')
@@ -685,7 +685,7 @@ _tat2_fmriprep(){
       return 2
 
    # TODO: option to save outside of fmrirep func dir
-   tat2 -output "$session_func/${BASH_REMATCH}desc-preproc_tat2star.nii.gz" "$@" ${GLOBFILES[@]}
+   dr2 -output "$session_func/${BASH_REMATCH}desc-preproc_dr2star.nii.gz" "$@" ${GLOBFILES[@]}
 }
 
 # run if not sourced
@@ -699,6 +699,6 @@ if ! [[ "$(caller)" != "0 "* ]]; then
    if [ -n "$FMRIPREP_DERIV_ROOT" ]; then
       _fmriprep_loop
    else
-      _tat2
+      _dr2
    fi
 fi

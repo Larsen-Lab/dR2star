@@ -18,7 +18,7 @@ def _parse_bool(value: str) -> bool:
 
 def get_parser() -> argparse.ArgumentParser:
     description = """
-    dR2star wrapper for tat2 fmriprep runs.
+    dR2star wrapper for dr2 fmriprep runs.
 
     This interface mirrors a BIDS App-style CLI with three positional
     arguments: input, output, and analysis level. Only the participant
@@ -137,7 +137,7 @@ def get_parser() -> argparse.ArgumentParser:
         dest="scale",
         metavar="SCALE",
         type=float,
-        help="Scale factor passed to tat2 (-scale).",
+        help="Scale factor passed to dr2 (-scale).",
     )
     parser.add_argument(
         "--voxscale",
@@ -153,7 +153,7 @@ def get_parser() -> argparse.ArgumentParser:
         "--inverse",
         dest="inverse",
         action="store_true",
-        help="Output R2* (i.e., 1/T2*) instead of T2* (tat2 -inverse).",
+        help="Output R2* (i.e., 1/T2*) instead of T2* (dr2 -inverse).",
     )
     parser.add_argument(
         "--time-norm",
@@ -161,7 +161,7 @@ def get_parser() -> argparse.ArgumentParser:
         choices=["none", "mean", "median"],
         default="median",
         help=(
-            "Time normalization method (tat2 -mean_time/-median_time). "
+            "Time normalization method (dr2 -mean_time/-median_time). "
             "Use 'none' for default behavior."
         ),
     )
@@ -171,7 +171,7 @@ def get_parser() -> argparse.ArgumentParser:
         choices=["none", "mean", "median"],
         default="median",
         help=(
-            "Volume normalization method (tat2 -mean_vol/-median_vol/-no_vol). "
+            "Volume normalization method (dr2 -mean_vol/-median_vol/-no_vol). "
             "Use 'none' to disable volume normalization."
         ),
     )
@@ -224,19 +224,19 @@ def get_parser() -> argparse.ArgumentParser:
         "-w",
         dest="tmp_dir",
         metavar="DIR",
-        help="Working directory for intermediate files (tat2 -tmp).",
+        help="Working directory for intermediate files (dr2 -tmp).",
     )
     parser.add_argument(
         "--noclean",
         dest="noclean",
         action="store_true",
-        help="Keep temporary files (tat2 -noclean).",
+        help="Keep temporary files (dr2 -noclean).",
     )
     parser.add_argument(
         "--verbose",
         dest="verbose",
         action="store_true",
-        help="Enable verbose logging (tat2 -verbose).",
+        help="Enable verbose logging (dr2 -verbose).",
     )
 
     return parser

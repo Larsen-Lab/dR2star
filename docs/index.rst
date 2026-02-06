@@ -1,7 +1,7 @@
 dR2star
 =======
 
-dR2star is a BIDS-app style wrapper around ``tat2`` for running on fMRIPrep
+dR2star is a BIDS-app style wrapper around ``dr2`` for running on fMRIPrep
 derivatives. It scans each ``func/`` directory, aggregates matching preprocessed
 BOLD runs, and writes one output per subject/session.
 
