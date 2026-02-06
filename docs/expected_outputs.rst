@@ -39,7 +39,7 @@ a single output is created for the concatenated group.
            sub-001_ses-01_task-rest_space-MNI152NLin6Asym_res-2_desc-dR2star_dR2starmap.json
 
 Whether or not concatenation is active, a merged intermediate BOLD file is created. This contains
-the fMRI volumes that will be used to create the dr2star map file, and is the result of censoring
+the fMRI volumes that will be used to create the dR2star map file, and is the result of censoring
 (high FD/DVARS) and concatenating. If ``--keep-merged`` is set, you will also see:
 
 .. code-block:: text
@@ -101,8 +101,8 @@ output paths and ``bids:preprocessed:`` for input paths).
 
 Common fields include:
 
-- ``dr2star_generated``: the raw settings and command provenance from the dr2
-  step (including normalization choices and runtime commands).
+- ``dr2star_generated``: the raw settings and command provenance from the
+  dR2star processing step (including normalization choices and runtime commands).
 - ``confounds_file``: the confounds TSV(s) used to generate volume selections.
 - ``fd_thres`` and ``dvars_thresh``: motion and signal quality thresholds used for selection.
 - ``source_data``: list of BIDS URIs for the input BOLD files used in this

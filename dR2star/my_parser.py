@@ -16,11 +16,29 @@ def _parse_bool(value: str) -> bool:
     raise argparse.ArgumentTypeError(f"Invalid boolean value: '{value}'.")
 
 
+_METHOD_CHOICES = ("dR2star", "nT2star", "zscore")
+_METHOD_ALIASES = {
+    "dr2star": "dR2star",
+    "nt2star": "nT2star",
+    "zscore": "zscore",
+}
+
+
+def _parse_method(value: str) -> str:
+    key = value.strip().lower()
+    if key in _METHOD_ALIASES:
+        return _METHOD_ALIASES[key]
+    choices = ", ".join(_METHOD_CHOICES)
+    raise argparse.ArgumentTypeError(
+        f"Invalid method '{value}'. Choices (case-insensitive): {choices}."
+    )
+
+
 def get_parser() -> argparse.ArgumentParser:
     description = """
     dR2star is a BIDS-App designed to generate T2* estimates using
-    single-echo fMRI outputs from fMRIPrep. It wraps the dr2 processing
-    binary to generate dR2* maps.
+    single-echo fMRI outputs from fMRIPrep. It generates dR2* maps
+    from those preprocessed outputs.
 
     This interface mirrors a BIDS App-style CLI with three positional
     arguments: input, output, and analysis level.
@@ -107,11 +125,12 @@ def get_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--dr2star-method",
         dest="method",
-        choices=["neglog", "signalproportion", "zsignalproportion"],
-        default="neglog",
+        type=_parse_method,
+        choices=_METHOD_CHOICES,
+        default="dR2star",
         help=(
             "Computation method for the dR2star map. "
-            "Choices: neglog, signalproportion, zsignalproportion."
+            "Choices (case-insensitive): dR2star, nT2star, zscore."
         ),
     )
     parser.add_argument(
@@ -150,14 +169,14 @@ def get_parser() -> argparse.ArgumentParser:
         "--keep-merged",
         dest="keep_merged",
         action="store_true",
-        help="Keep merged intermediate volumes that are fed to dr2 for dR2* computation.",
+        help="Keep merged intermediate volumes used for dR2* computation.",
     )
     parser.add_argument(
         "--scale",
         dest="scale",
         metavar="SCALE",
         type=float,
-        help="Scale factor passed to dr2 (-scale).",
+        help="Scale factor applied during normalization.",
     )
     parser.add_argument(
         "--voxscale",
@@ -173,7 +192,7 @@ def get_parser() -> argparse.ArgumentParser:
         "--inverse",
         dest="inverse",
         action="store_true",
-        help="Output R2* (i.e., 1/T2*) instead of T2* (dr2 -inverse).",
+        help="Output R2* (i.e., 1/T2*) instead of T2*.",
     )
     parser.add_argument(
         "--time-norm",
@@ -181,8 +200,8 @@ def get_parser() -> argparse.ArgumentParser:
         choices=["none", "mean", "median"],
         default="median",
         help=(
-            "Time normalization method (dr2 -mean_time/-median_time). "
-            "Use 'none' for default behavior."
+            "Time normalization method. "
+            "Use 'none' to skip time normalization."
         ),
     )
     parser.add_argument(
@@ -191,7 +210,7 @@ def get_parser() -> argparse.ArgumentParser:
         choices=["none", "mean", "median"],
         default="median",
         help=(
-            "Volume normalization method (dr2 -mean_vol/-median_vol/-no_vol). "
+            "Volume normalization method. "
             "Use 'none' to disable volume normalization."
         ),
     )
@@ -247,19 +266,19 @@ def get_parser() -> argparse.ArgumentParser:
         "-w",
         dest="tmp_dir",
         metavar="DIR",
-        help="Working directory for intermediate files (dr2 -tmp).",
+        help="Working directory for intermediate files.",
     )
     parser.add_argument(
         "--noclean",
         dest="noclean",
         action="store_true",
-        help="Keep temporary files (dr2 -noclean).",
+        help="Keep temporary files.",
     )
     parser.add_argument(
         "--verbose",
         dest="verbose",
         action="store_true",
-        help="Enable verbose logging (dr2 -verbose).",
+        help="Enable verbose logging.",
     )
 
     return parser

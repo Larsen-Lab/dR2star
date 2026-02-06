@@ -5,6 +5,14 @@ Usage
    :prog: dR2star
    :nodefaultconst:
 
+Method Choices
+--------------
+The ``--dr2star-method`` option accepts the following values (case-insensitive):
+
+- ``dR2star``: log transform of the normalized signal (natural log).
+- ``nT2star``: normalized signal proportion without log/z-score transforms.
+- ``zscore``: z-score transform of the normalized signal.
+
 Masking Details
 ---------------
 This workflow supports three masking modes, depending on the ``--mask-input`` flag:

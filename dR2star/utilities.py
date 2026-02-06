@@ -213,7 +213,7 @@ def ensure_dataset_description(output_dir: Path) -> Path:
         if isinstance(entry, dict) and entry.get("Name") in ("dr2star", "dR2star"):
             entry["Name"] = "dR2star"
             entry["Version"] = version
-            entry.setdefault("Description", "dR2star processing using dr2")
+            entry.setdefault("Description", "dR2star processing pipeline")
             updated = True
             break
     if not updated:
@@ -221,7 +221,7 @@ def ensure_dataset_description(output_dir: Path) -> Path:
             {
                 "Name": "dR2star",
                 "Version": version,
-                "Description": "dR2star processing using dr2",
+                "Description": "dR2star processing pipeline",
             }
         )
     description["GeneratedBy"] = generated_by

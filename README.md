@@ -1,11 +1,8 @@
 # dR2*
 ## Usage
-This repo provides a BIDS-app style wrapper (`dR2star`) around `dr2`
-pipeline for running on fMRIPrep derivatives. The wrapper scans each
-`func/` directory, aggregates matching preprocessed BOLD runs, and
-writes one output per subject/session.
-
-`dR2star` is the wrapper CLI and `dr2` is the underlying processing binary.
+This repo provides a BIDS-app style pipeline (`dR2star`) for running on
+fMRIPrep derivatives. It scans each `func/` directory, aggregates matching
+preprocessed BOLD runs, and writes one output per subject/session.
 
 High-level flow:
  - point to an fMRIPrep derivatives folder

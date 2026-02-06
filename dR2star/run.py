@@ -69,15 +69,16 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     #Initially set processing flags based on method choice
-    if args.method == "neglog":
+    method_key = args.method.lower()
+    if method_key == "dr2star":
         default_use_ln = True
         default_use_zscore = False
         default_voxscale = False
-    elif args.method == "signalproportion":
+    elif method_key == "nt2star":
         default_use_ln = False
         default_use_zscore = False
         default_voxscale = False
-    elif args.method == "zsignalproportion":
+    elif method_key == "zscore":
         default_use_ln = False
         default_use_zscore = True
         default_voxscale = False
