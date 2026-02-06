@@ -7,15 +7,6 @@ import argparse
 import textwrap
 
 
-def _parse_bool(value: str) -> bool:
-    value = value.strip().lower()
-    if value in {"1", "true", "t", "yes", "y", "on"}:
-        return True
-    if value in {"0", "false", "f", "no", "n", "off"}:
-        return False
-    raise argparse.ArgumentTypeError(f"Invalid boolean value: '{value}'.")
-
-
 _METHOD_CHOICES = ("dR2star", "nT2star", "zscore")
 _METHOD_ALIASES = {
     "dr2star": "dR2star",
@@ -179,22 +170,6 @@ def get_parser() -> argparse.ArgumentParser:
         help="Scale factor applied during normalization.",
     )
     parser.add_argument(
-        "--voxscale",
-        dest="voxscale",
-        metavar="BOOL",
-        type=_parse_bool,
-        help=(
-            "Override method-derived voxel scaling choice. "
-            "Accepts true/false. Not recommended."
-        ),
-    )
-    parser.add_argument(
-        "--inverse",
-        dest="inverse",
-        action="store_true",
-        help="Output R2* (i.e., 1/T2*) instead of T2*.",
-    )
-    parser.add_argument(
         "--time-norm",
         dest="time_norm",
         choices=["none", "mean", "median"],
@@ -226,26 +201,6 @@ def get_parser() -> argparse.ArgumentParser:
         dest="sample_method",
         choices=["first", "last", "random"],
         help="Sub-sampling method for confounds-based selection across runs.",
-    )
-    parser.add_argument(
-        "--use-ln",
-        dest="use_ln",
-        metavar="BOOL",
-        type=_parse_bool,
-        help=(
-            "Override method-derived log transform choice. "
-            "Accepts true/false. Not recommended."
-        ),
-    )
-    parser.add_argument(
-        "--use-zscore",
-        dest="use_zscore",
-        metavar="BOOL",
-        type=_parse_bool,
-        help=(
-            "Override method-derived z-score choice. "
-            "Accepts true/false. Not recommended."
-        ),
     )
     parser.add_argument(
         "--fd-thres",

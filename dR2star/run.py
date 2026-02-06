@@ -30,8 +30,6 @@ def build_cmd_template(
     cmd.extend(["-mask", str(mask_path), "-output", str(output_path)])
     if not args.voxscale:
         cmd.append("-no_voxscale")
-    if args.inverse:
-        cmd.append("-inverse")
     if args.time_norm == "mean":
         cmd.append("-mean_time")
     elif args.time_norm == "median":
@@ -86,49 +84,18 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"Unsupported method '{args.method}'")
 
 
-    #See if any processing flags are being overridden by user input
+    #Apply method-derived processing defaults
     use_ln = default_use_ln
     use_zscore = default_use_zscore
     voxscale = default_voxscale
-    if args.use_ln is not None:
-        if args.use_ln != default_use_ln:
-            print(
-                "Warning: method chosen was "
-                f"{args.method}, which has default value for use_ln "
-                f"as {default_use_ln}, but this option is being changed "
-                f"to {args.use_ln} based on user-defined processing flags."
-            )
-        use_ln = args.use_ln
-        if args.use_ln and args.use_zscore is None:
-            use_zscore = False
-    if args.use_zscore is not None:
-        if args.use_zscore != default_use_zscore:
-            print(
-                "Warning: method chosen was "
-                f"{args.method}, which has default value for use_zscore "
-                f"as {default_use_zscore}, but this option is being changed "
-                f"to {args.use_zscore} based on user-defined processing flags."
-            )
-        use_zscore = args.use_zscore
-        if args.use_zscore and args.use_ln is None:
-            use_ln = False
-    if args.voxscale is not None:
-        if args.voxscale != default_voxscale:
-            print(
-                "Warning: method chosen was "
-                f"{args.method}, which has default value for voxscale "
-                f"as {default_voxscale}, but this option is being changed "
-                f"to {args.voxscale} based on user-defined processing flags."
-            )
-        voxscale = args.voxscale
 
     # Validate mutually exclusive processing flags
     if use_ln and use_zscore:
-        parser.error("--use-ln and --use-zscore cannot both be true.")
+        parser.error("Invalid method configuration: both log and z-score transforms are enabled.")
     if voxscale and (use_ln or use_zscore):
         parser.error(
-            "--voxscale cannot be combined with --use-ln/--use-zscore or a method "
-            "that implies them; dr2 requires -no_voxscale for those transforms."
+            "Invalid method configuration: voxel scaling cannot be combined with "
+            "log or z-score transforms."
         )
     args.use_ln = use_ln
     args.use_zscore = use_zscore
