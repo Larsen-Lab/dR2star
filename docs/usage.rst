@@ -210,7 +210,7 @@ Default settings that apply in this case:
 - ``--reference-average-method`` defaults to ``median``.
 - ``--reference-mask-input`` is not set, so fMRIPrep brain masks in ``func/``
   (``*_space-<space>_desc-brain_mask.nii.gz``) are used as the reference region.
-- ``--fd-thres`` defaults to ``0.3`` and ``--dvars-thresh`` is unset (disabled).
+- ``--fd-thresh`` defaults to ``0.3`` and ``--dvars-thresh`` is unset (disabled).
 - ``--maxvols`` is unset, so all volumes that pass censoring are used.
 
 For each run, dR2star finds the confounds file, derives the matching preprocessed
