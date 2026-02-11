@@ -35,6 +35,17 @@ def get_parser() -> argparse.ArgumentParser:
     arguments: input, output, and analysis level.
     """
 
+    epilog = """
+    Examples
+    --------
+    Process all participants and sessions:
+      dR2star /data/derivatives/fmriprep /data/derivatives/dR2star participant
+
+    Process a single participant:
+      dR2star /data/derivatives/fmriprep /data/derivatives/dR2star participant \
+        --participant-label 01
+    """
+
 
     parser = argparse.ArgumentParser(
         prog="dR2star",
