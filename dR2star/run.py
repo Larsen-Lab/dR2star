@@ -45,7 +45,15 @@ def build_cmd_template(
     elif args.volume_norm == "median":
         cmd.append("-median_vol")
     if args.tmp_dir:
-        cmd.extend(["-tmp", args.tmp_dir])
+        tmp_path = Path(args.tmp_dir)
+        if not tmp_path.is_absolute():
+            tmp_path = Path.cwd() / tmp_path
+        if tmp_path.exists() and not tmp_path.is_dir():
+            raise ValueError(
+                f"Working directory exists and is not a directory: {tmp_path}"
+            )
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        cmd.extend(["-tmp", str(tmp_path)])
     else:
         cmd.extend(["-tmp", str(output_path.parent)])
     if args.noclean:
