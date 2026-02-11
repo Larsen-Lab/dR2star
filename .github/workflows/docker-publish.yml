@@ -1,0 +1,71 @@
+name: Build and Publish Container
+
+on:
+  push:
+    branches: [main, development, predevelopment]
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Normalize image and account names
+        run: |
+          echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+          echo "GHCR_USERNAME=${GITHUB_ACTOR,,}" >> "$GITHUB_ENV"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ env.GHCR_USERNAME }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve image tag and version
+        id: meta
+        run: |
+          image="${REGISTRY}/${IMAGE_NAME}"
+          if [ "${GITHUB_EVENT_NAME}" = "release" ]; then
+            tag="${{ github.event.release.tag_name }}"
+            version="${tag#v}"
+            echo "tags=${image}:${version}" >> "$GITHUB_OUTPUT"
+          elif [ "${GITHUB_REF_NAME}" = "development" ]; then
+            version="development-$(git rev-parse --short HEAD)"
+            echo "tags=${image}:development" >> "$GITHUB_OUTPUT"
+          elif [ "${GITHUB_REF_NAME}" = "predevelopment" ]; then
+            version="predevelopment-$(git rev-parse --short HEAD)"
+            echo "tags=${image}:predevelopment" >> "$GITHUB_OUTPUT"
+          else
+            version="main-$(git rev-parse --short HEAD)"
+            echo "tags=${image}:latest" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          build-args: |
+            DR2STAR_VERSION=${{ steps.meta.outputs.version }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
