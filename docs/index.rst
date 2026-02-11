@@ -2,8 +2,7 @@ dR2star
 =======
 
 dR2star is a BIDS-app style pipeline designed to calculate estimates
-of T2* based on fMRIPrep outputs. It scans each ``func/`` directory to
-aggregate matching preprocessed BOLD runs before generating outputs.
+of T2* based on fMRIPrep outputs. 
 
 Getting started
 ---------------
