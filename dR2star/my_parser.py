@@ -194,7 +194,7 @@ def get_parser() -> argparse.ArgumentParser:
         help="Sub-sampling method for confounds-based selection across runs.",
     )
     parser.add_argument(
-        "--fd-thres",
+        "--fd-thresh",
         dest="fd_thres",
         metavar="THRESH",
         type=float,
