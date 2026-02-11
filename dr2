@@ -39,7 +39,6 @@ declare -a GLOBFILES
 
 filedesc_whichvol=""
 
-DR2_VER="1.0.0.20260102-fmriprep"
 # 1.0.0.20260102
 #   add -fmriprep option
 # 20240719-calc_ln+BUGFIX-no_vol
@@ -593,16 +592,7 @@ _dr2(){
 
    [ $vox_scale -eq 0 ] && scale_msg="SCALE=NA" || scale_msg="SCALE=$SCALE"
 
-   # use gitver (lncdtool) when on path and dr2 tracked in git repo (e.g. in development)
-   # otherwise use hardcoded DR2_VER (e.g. copied just dr2/no repo; or using from system package)
-   if command -v gitver >/dev/null 2>&1; then
-      gitver="$(gitver "$0" 2>/dev/null || :)"
-   else
-      gitver=""
-   fi
-   [[ -z "$gitver" || "$gitver" =~ :NA$ ]] && gitver=$DR2_VER
-
-   note_msg="$0 $allargs # $(pwd); $scale_msg, nvoxes=$all_numvox, censors=$all_censors; nt=$all_nts; vol:$volnorm_opt, time:$tnorm_opt; $MAXVOLSTOTAL/$concat_nvol/$nvols_nocen used/not-cen/total nvols; $cnt/${#GLOBFILES[@]} files; $gitver"
+   note_msg="$0 $allargs # $(pwd); $scale_msg, nvoxes=$all_numvox, censors=$all_censors; nt=$all_nts; vol:$volnorm_opt, time:$tnorm_opt; $MAXVOLSTOTAL/$concat_nvol/$nvols_nocen used/not-cen/total nvols; $cnt/${#GLOBFILES[@]} files"
    3dNotes -h "$note_msg" "$OUTPUT"
 
    # computer-friendly output for parsing when running many option permutations
@@ -627,8 +617,6 @@ _dr2(){
 	 "concat_nvol": $concat_nvol,
 	 "nvolx_nocen": $nvols_nocen,
 	 "scale": "$SCALE",
-	 "git": "$gitver",
-	 "dr2_ver": "$DR2_VER",
 	 "use_inverse": "$t2_inv",
 	 "use_scale": "$vox_scale",
 	 "maxvols": $MAXVOLSTOTAL
