@@ -1,3 +1,4 @@
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18929595.svg)](https://doi.org/10.5281/zenodo.18929595)
 # dR2*
 ## Usage
 This repo provides a BIDS-app style pipeline (`dR2star`) for running on
