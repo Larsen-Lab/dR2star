@@ -17,6 +17,7 @@ The pages below cover the most common next steps:
 - :doc:`container` for how to pull and run the container image. This is the recommended way to use dR2star.
 - :doc:`usage` for CLI options and processing configuration.
 - :doc:`expected_outputs` for what results to expect and how file names change.
+- :doc:`maintainers` for repository organization, release management, container publishing, and Read the Docs maintenance.
 
 
 .. toctree::
@@ -27,3 +28,4 @@ The pages below cover the most common next steps:
    usage
    container
    expected_outputs
+   maintainers
