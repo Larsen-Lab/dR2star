@@ -233,11 +233,28 @@ def main(argv: list[str] | None = None) -> int:
                     if any(f"_task-{task}_" in path.name for task in task_ids)
                 ]
 
-            #Make the output anat directory if it does not already exist
-            output_anat_dir.mkdir(parents=True, exist_ok=True)
             print(
                 f"Found {len(confound_files)} confound file(s) for session {session_label}."
             )
+            if not confound_files:
+                grouping_label = f"sub-{temp_subject}"
+                if temp_session:
+                    grouping_label += f" ses-{temp_session}"
+                task_filter_message = ""
+                if args.task_id:
+                    task_filter_message = (
+                        " after applying task filter(s): "
+                        + ", ".join(args.task_id)
+                    )
+                print(
+                    f"Processing will not occur for {grouping_label} because no "
+                    f"confound files were found under {func_directory} matching "
+                    f"{', '.join(confound_patterns)}{task_filter_message}."
+                )
+                continue
+
+            #Make the output anat directory if it does not already exist
+            output_anat_dir.mkdir(parents=True, exist_ok=True)
 
             #For every confound file (aka every fMRI acquisition), try to run the dR2star pipeline.
             confound_names: list[Path] = []
@@ -255,7 +272,10 @@ def main(argv: list[str] | None = None) -> int:
                 bold_path = func_directory / bold_name
                 if not bold_path.exists():
                     raise FileNotFoundError(
-                        f"Missing preproc bold file for space '{args.space}': {bold_path}"
+                        "Missing preproc BOLD file derived from the confounds file. "
+                        f"Expected to find '{bold_name}' at {bold_path} based on "
+                        f"confounds file {confound_file}. "
+                        "This likely suggests the fMRIPrep outputs are not complete."
                     )
 
                 #If no mask is provided, we will grab the brain mask from
