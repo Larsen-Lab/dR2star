@@ -269,7 +269,7 @@ def postprocess_dr2_json(
         return value
 
     data = _rewrite(data)
-    for key in {"censor_files", "nt", "concat_nvol", "nvolx_nocen", "maxvols"}:
+    for key in {"censor_files", "nt", "concat_nvol", "nvolx_nocen", "maxvols", "fixedvols"}:
         data.pop(key, None)
     if isinstance(confounds_path, list):
         confounds_value = [_rewrite(str(path)) for path in confounds_path]
@@ -426,7 +426,7 @@ def build_volume_selection_from_confounds(
     fd_thres: float,
     dvars_thresh: float | None,
     sample_method: str | None,
-    maxvols: int | None,
+    fixedvols: int | None,
 ) -> tuple[dict[Path, list[int]], dict[str, int]]:
     """Return per-NIfTI 0/1 selection masks and volume counts."""
     if len(confound_paths) != len(nifti_paths):
@@ -471,17 +471,17 @@ def build_volume_selection_from_confounds(
     num_volumes_initial = int(sum(per_run_nvols))
     num_volumes_post_censoring = int(sum(len(keep) for keep in per_run_keep))
 
-    if maxvols is not None and maxvols > 0:
+    if fixedvols is not None and fixedvols > 0:
         if sample_method == "first":
-            selected = global_indices[:maxvols]
+            selected = global_indices[:fixedvols]
         elif sample_method == "last":
-            selected = global_indices[-maxvols:]
+            selected = global_indices[-fixedvols:]
         else:
             rng = np.random.default_rng()
-            if maxvols >= len(global_indices):
+            if fixedvols >= len(global_indices):
                 selected = global_indices
             else:
-                choice_idx = rng.choice(len(global_indices), size=maxvols, replace=False)
+                choice_idx = rng.choice(len(global_indices), size=fixedvols, replace=False)
                 selected = [global_indices[idx] for idx in choice_idx]
     else:
         selected = global_indices
@@ -504,4 +504,3 @@ def build_volume_selection_from_confounds(
         "num_volumes_post_censoring": num_volumes_post_censoring,
         "num_volumes_analyzed": num_volumes_analyzed,
     }
-

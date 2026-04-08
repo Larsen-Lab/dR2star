@@ -253,9 +253,6 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 continue
 
-            #Make the output anat directory if it does not already exist
-            output_anat_dir.mkdir(parents=True, exist_ok=True)
-
             #For every confound file (aka every fMRI acquisition), try to run the dR2star pipeline.
             confound_names: list[Path] = []
             bold_paths: list[Path] = []
@@ -364,14 +361,14 @@ def main(argv: list[str] | None = None) -> int:
                     continue
 
                 #Figure out which volumes to keep based on confound files and user settings
-                #(such as FD/DVARS thresholds, sampling method, maxvols, etc.)
+                #(such as FD/DVARS thresholds, sampling method, fixedvols, etc.)
                 selections, volume_stats = utilities.build_volume_selection_from_confounds(
                     group_confound_files,
                     group_bold_paths,
                     fd_thres=args.fd_thres,
                     dvars_thresh=args.dvars_thresh,
                     sample_method=args.sample_method,
-                    maxvols=args.maxvols,
+                    fixedvols=args.fixedvols,
                 )
 
                 print("Merge inputs and selected volume counts:")
@@ -403,6 +400,24 @@ def main(argv: list[str] | None = None) -> int:
                     f"Selected {total_kept} total volume(s) across "
                     f"{len(group_bold_paths)} run(s)."
                 )
+                grouping_label = f"sub-{temp_subject}"
+                if temp_session:
+                    grouping_label += f" ses-{temp_session}"
+                if total_kept == 0:
+                    print(
+                        f"Processing will not occur for {grouping_label} "
+                        "because no volumes remained after confounds-based "
+                        "selection."
+                    )
+                    continue
+                if args.fixedvols is not None and total_kept < args.fixedvols:
+                    print(
+                        f"Processing will not occur for {grouping_label} "
+                        "because "
+                        f"only {total_kept} volume(s) remained after selection, "
+                        f"which is fewer than --fixedvols {args.fixedvols}."
+                    )
+                    continue
 
                 #Come up with the name for the merged intermediate file
                 reduced_name = group_reduced_names[0]
@@ -479,7 +494,7 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                     "selection_params": {
                         "sample_method": args.sample_method or "first",
-                        "maxvols": args.maxvols,
+                        "fixedvols": args.fixedvols,
                     },
                     "fd_thres": args.fd_thres,
                     "dvars_thresh": args.dvars_thresh,
