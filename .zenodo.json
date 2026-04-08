@@ -1,0 +1,74 @@
+{
+  "title": "dR2star",
+  "description": "dR2star is a BIDS-App style workflow for deriving dR2*/R2*-related estimates from single-echo fMRI data that have already been preprocessed with fMRIPrep.",
+  "upload_type": "software",
+  "keywords": [
+    "BIDS",
+    "fMRI",
+    "fMRIPrep",
+    "R2*",
+    "dR2star"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/Larsen-Lab/dR2star",
+      "relation": "isSupplementTo",
+      "resource_type": "software"
+    },
+    {
+      "identifier": "https://dr2star.readthedocs.io/en/stable/",
+      "relation": "isDocumentedBy",
+      "resource_type": "publication-technicalnote"
+    }
+  ],
+  "creators": [
+    {
+      "name": "Sullivan-Toole, Holly",
+      "affiliation": "Department of Pediatrics, Masonic Institute for the Developing Brain, University of Minnesota, Minneapolis, MN, 55455, United States; Masonic Institute for the Developing Brain, University of Minnesota, Minneapolis, MN, 55455, United States"
+    },
+    {
+      "name": "Parr, Ashley C.",
+      "affiliation": "Department of Psychiatry, University of Pittsburgh, Pittsburgh, PA, 15213, United States; Center for the Neural Basis of Cognition (CNBC), University of Pittsburgh & Carnegie Mellon University, Pittsburgh, PA, 15213, United States"
+    },
+    {
+      "name": "Heller, Carina",
+      "affiliation": "Department of Pediatrics, Masonic Institute for the Developing Brain, University of Minnesota, Minneapolis, MN, 55455, United States; Masonic Institute for the Developing Brain, University of Minnesota, Minneapolis, MN, 55455, United States"
+    },
+    {
+      "name": "Tervo-Clemmens, Brenden",
+      "affiliation": "Masonic Institute for the Developing Brain, University of Minnesota, Minneapolis, MN, 55455, United States; Department of Psychiatry and Behavioral Sciences, University of Minnesota, Minneapolis, MN, 55455, United States"
+    },
+    {
+      "name": "McCollum, rae",
+      "affiliation": "Masonic Institute for the Developing Brain, University of Minnesota, Minneapolis, MN, 55455, United States"
+    },
+    {
+      "name": "Ojha, Amar",
+      "affiliation": "Department of Psychiatry, University of Pittsburgh, Pittsburgh, PA, 15213, United States; Center for Neuroscience, University of Pittsburgh, Pittsburgh, PA, 15213, United States"
+    },
+    {
+      "name": "Feczko, Eric",
+      "affiliation": "Department of Pediatrics, Masonic Institute for the Developing Brain, University of Minnesota, Minneapolis, MN, 55455, United States; Masonic Institute for the Developing Brain, University of Minnesota, Minneapolis, MN, 55455, United States"
+    },
+    {
+      "name": "Lee, Erik",
+      "affiliation": "Masonic Institute for the Developing Brain, University of Minnesota, Minneapolis, MN, 55455, United States"
+    },
+    {
+      "name": "Foran, Will",
+      "affiliation": "Department of Psychiatry, University of Pittsburgh, Pittsburgh, PA, 15213, United States"
+    },
+    {
+      "name": "Calabro, Finnegan J.",
+      "affiliation": "Department of Psychiatry, University of Pittsburgh, Pittsburgh, PA, 15213, United States; Department of Bioengineering, University of Pittsburgh, Pittsburgh, PA, 15213, United States"
+    },
+    {
+      "name": "Luna, Beatriz",
+      "affiliation": "Department of Psychiatry, University of Pittsburgh, Pittsburgh, PA, 15213, United States"
+    },
+    {
+      "name": "Larsen, Bart",
+      "affiliation": "Department of Pediatrics, Masonic Institute for the Developing Brain, University of Minnesota, Minneapolis, MN, 55455, United States; Masonic Institute for the Developing Brain, University of Minnesota, Minneapolis, MN, 55455, United States"
+    }
+  ]
+}
