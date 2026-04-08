@@ -4,8 +4,9 @@
 from __future__ import annotations
 
 import json
-import os
+import shutil
 import subprocess
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -19,6 +20,8 @@ def build_cmd_template(
     mask_path: Path,
     output_path: Path,
     args,
+    tmp_dir_override: Path | None = None,
+    keep_dr2_tmp: bool = False,
 ) -> list[str]:
     """Build a minimal dr2 command for a single run."""
     cmd = [
@@ -44,7 +47,11 @@ def build_cmd_template(
         cmd.append("-mean_vol")
     elif args.volume_norm == "median":
         cmd.append("-median_vol")
-    if args.tmp_dir:
+    if tmp_dir_override is not None:
+        tmp_path = Path(tmp_dir_override)
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        cmd.extend(["-tmp", str(tmp_path)])
+    elif args.tmp_dir:
         tmp_path = Path(args.tmp_dir)
         if not tmp_path.is_absolute():
             tmp_path = Path.cwd() / tmp_path
@@ -56,7 +63,7 @@ def build_cmd_template(
         cmd.extend(["-tmp", str(tmp_path)])
     else:
         cmd.extend(["-tmp", str(output_path.parent)])
-    if args.noclean:
+    if args.noclean or keep_dr2_tmp:
         cmd.append("-noclean")
     if args.verbose:
         cmd.append("-verbose")
@@ -514,12 +521,18 @@ def main(argv: list[str] | None = None) -> int:
                 #Build and run the command that will be used to call dr2 for ##########
                 #this merged file. #####################################################
                 ########################################################################
+                dr2_tmp_base = utilities.resolve_tmp_dir(args.tmp_dir, output_path)
+                dr2_wrapper_tmp = Path(
+                    tempfile.mkdtemp(prefix="dr2star_wrapper_", dir=str(dr2_tmp_base))
+                )
                 cmd_template = build_cmd_template(
                     merged_output_path,
                     None,
                     mask_path,
                     output_path,
                     args,
+                    tmp_dir_override=dr2_wrapper_tmp,
+                    keep_dr2_tmp=True,
                 )
                 try:
                     result = subprocess.run(
@@ -528,9 +541,16 @@ def main(argv: list[str] | None = None) -> int:
                         cwd=output_anat_dir,
                     )
                 except FileNotFoundError:
+                    if not args.noclean:
+                        shutil.rmtree(dr2_wrapper_tmp, ignore_errors=True)
                     parser.error("'dr2' not found on PATH. Ensure it is installed or in PATH.")
 
+                reference_values = utilities.read_reference_values(dr2_wrapper_tmp)
                 if result.returncode != 0:
+                    if not args.noclean:
+                        shutil.rmtree(dr2_wrapper_tmp, ignore_errors=True)
+                    else:
+                        print(f"Preserved dr2 working files under: {dr2_wrapper_tmp}")
                     return result.returncode
                 print("dr2 complete.")
 
@@ -562,6 +582,8 @@ def main(argv: list[str] | None = None) -> int:
                     data["source_data"] = selection_metadata["source_data"]
                     data["mask_resampled"] = selection_metadata["mask_resampled"]
                     data["mask_file"] = selection_metadata["mask_file"]
+                    if reference_values is not None:
+                        data["reference_values"] = reference_values
                     if "mask_resample_map" in selection_metadata:
                         data["mask_resample_map"] = selection_metadata["mask_resample_map"]
                     write_json_with_inline_masks(sidecar_json, data)
@@ -569,6 +591,10 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"Removing merged intermediate: {merged_output_path.name}")
                     merged_output_path.unlink(missing_ok=True)
                     merged_json_path.unlink(missing_ok=True)
+                if not args.noclean:
+                    shutil.rmtree(dr2_wrapper_tmp, ignore_errors=True)
+                else:
+                    print(f"Preserved dr2 working files under: {dr2_wrapper_tmp}")
 
     #Ta-da, all done!
     return 0

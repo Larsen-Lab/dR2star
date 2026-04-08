@@ -60,6 +60,69 @@ def _replace_confounds_suffix(filename: str, suffix: str) -> str:
     raise NameError(f"Unexpected confound file name format: {filename}")
 
 
+def resolve_tmp_dir(tmp_dir: str | None, output_path: Path) -> Path:
+    """Resolve the dr2 temp parent directory from CLI args and output path."""
+    if tmp_dir:
+        tmp_path = Path(tmp_dir)
+        if not tmp_path.is_absolute():
+            tmp_path = Path.cwd() / tmp_path
+        if tmp_path.exists() and not tmp_path.is_dir():
+            raise ValueError(
+                f"Working directory exists and is not a directory: {tmp_path}"
+            )
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        return tmp_path
+    return Path(output_path).parent
+
+
+def read_reference_values(dr2_wrapper_tmp: Path) -> list[float] | None:
+    """Read numeric reference values from the preserved dr2 working directory."""
+    work_dirs = sorted(path for path in dr2_wrapper_tmp.glob("dr2star_*") if path.is_dir())
+    if not work_dirs:
+        print(
+            f"Warning: could not find a dr2 working directory under {dr2_wrapper_tmp}."
+        )
+        return None
+
+    work_dir = work_dirs[-1]
+    one_d_files = sorted(path for path in work_dir.glob("*.1D") if path.is_file())
+    if not one_d_files:
+        print(f"Warning: no .1D files found in dr2 working directory {work_dir}.")
+        return None
+
+    target_file = None
+    if len(one_d_files) == 1:
+        target_file = one_d_files[0]
+    else:
+        preferred = [path for path in one_d_files if "_volnorm-" in path.name]
+        if len(preferred) == 1:
+            target_file = preferred[0]
+        else:
+            print(
+                "Warning: unable to uniquely identify the reference-values "
+                f".1D file in {work_dir}; found {[path.name for path in one_d_files]}."
+            )
+            return None
+
+    reference_values: list[float] = []
+    for line in target_file.read_text().splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        try:
+            reference_values.append(float(stripped))
+        except ValueError:
+            print(
+                "Warning: skipping non-numeric line in reference-values file "
+                f"{target_file}: {stripped}"
+            )
+
+    if not reference_values:
+        print(f"Warning: no numeric reference values found in {target_file}.")
+        return None
+    return reference_values
+
+
 def find_mask_in_directory(
     mask_root: Path,
     subject: str,
