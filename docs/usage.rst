@@ -161,7 +161,7 @@ dR2star follows a consistent pattern to discover and process inputs:
 2. For each confounds file, it derives the matching preprocessed BOLD path by
    replacing the confounds suffix with ``_space-<space>_desc-preproc_bold.nii.gz``.
 3. It reads framewise displacement (and optional DVARS) from the confounds file to
-   build a censor mask, then applies ``--maxvols`` and ``--sample-method`` if supplied.
+   build a censor mask, then applies ``--fixedvols`` and ``--sample-method`` if supplied.
 4. It merges the selected volumes into a single intermediate BOLD file per group.
 5. If ``--reference-mask-input`` is not provided, it uses the fMRIPrep brain mask
    in the ``func/`` directory (``*_space-<space>_desc-brain_mask.nii.gz``). If a
@@ -182,9 +182,10 @@ The ``--concat`` flag groups runs across one or more BIDS entities (for example
 3. If a reference mask needs resampling, it is resampled to the merged BOLD grid
    using nearest-neighbor interpolation. If multiple masks exist in the group,
    the mask associated with the run that has the most selected volumes is used.
-4. If ``--maxvols`` is set, dR2star limits the number of selected volumes across
+4. If ``--fixedvols`` is set, dR2star requires that many selected volumes across
    the group. ``--sample-method`` controls whether the first, last, or a random
-   subset of volumes is taken.
+   subset of volumes is taken, and processing is skipped when fewer than the
+   requested number of volumes remain after selection.
 
 To interpret the resulting metadata, see:
 
@@ -211,7 +212,7 @@ Default settings that apply in this case:
 - ``--reference-mask-input`` is not set, so fMRIPrep brain masks in ``func/``
   (``*_space-<space>_desc-brain_mask.nii.gz``) are used as the reference region.
 - ``--fd-thresh`` defaults to ``0.3`` and ``--dvars-thresh`` is unset (disabled).
-- ``--maxvols`` is unset, so all volumes that pass censoring are used.
+- ``--fixedvols`` is unset, so all volumes that pass censoring are used.
 
 For each run, dR2star finds the confounds file, derives the matching preprocessed
 BOLD file, builds the censor mask from FD (and DVARS if provided), and then writes

@@ -181,11 +181,11 @@ def get_parser() -> argparse.ArgumentParser:
         help="Reference region averaging method.",
     )
     parser.add_argument(
-        "--maxvols",
-        dest="maxvols",
+        "--fixedvols",
+        dest="fixedvols",
         metavar="NVOL",
         type=int,
-        help="Limit total selected volumes across all runs in a group of concatenated files.",
+        help="Require and analyze exactly NVOL selected volumes across all runs in a group of concatenated files.",
     )
     parser.add_argument(
         "--sample-method",

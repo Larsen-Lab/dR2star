@@ -4,8 +4,9 @@
 from __future__ import annotations
 
 import json
-import os
+import shutil
 import subprocess
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -19,6 +20,8 @@ def build_cmd_template(
     mask_path: Path,
     output_path: Path,
     args,
+    tmp_dir_override: Path | None = None,
+    keep_dr2_tmp: bool = False,
 ) -> list[str]:
     """Build a minimal dr2 command for a single run."""
     cmd = [
@@ -44,7 +47,11 @@ def build_cmd_template(
         cmd.append("-mean_vol")
     elif args.volume_norm == "median":
         cmd.append("-median_vol")
-    if args.tmp_dir:
+    if tmp_dir_override is not None:
+        tmp_path = Path(tmp_dir_override)
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        cmd.extend(["-tmp", str(tmp_path)])
+    elif args.tmp_dir:
         tmp_path = Path(args.tmp_dir)
         if not tmp_path.is_absolute():
             tmp_path = Path.cwd() / tmp_path
@@ -56,7 +63,7 @@ def build_cmd_template(
         cmd.extend(["-tmp", str(tmp_path)])
     else:
         cmd.extend(["-tmp", str(output_path.parent)])
-    if args.noclean:
+    if args.noclean or keep_dr2_tmp:
         cmd.append("-noclean")
     if args.verbose:
         cmd.append("-verbose")
@@ -233,11 +240,25 @@ def main(argv: list[str] | None = None) -> int:
                     if any(f"_task-{task}_" in path.name for task in task_ids)
                 ]
 
-            #Make the output anat directory if it does not already exist
-            output_anat_dir.mkdir(parents=True, exist_ok=True)
             print(
                 f"Found {len(confound_files)} confound file(s) for session {session_label}."
             )
+            if not confound_files:
+                grouping_label = f"sub-{temp_subject}"
+                if temp_session:
+                    grouping_label += f" ses-{temp_session}"
+                task_filter_message = ""
+                if args.task_id:
+                    task_filter_message = (
+                        " after applying task filter(s): "
+                        + ", ".join(args.task_id)
+                    )
+                print(
+                    f"Processing will not occur for {grouping_label} because no "
+                    f"confound files were found under {func_directory} matching "
+                    f"{', '.join(confound_patterns)}{task_filter_message}."
+                )
+                continue
 
             #For every confound file (aka every fMRI acquisition), try to run the dR2star pipeline.
             confound_names: list[Path] = []
@@ -255,7 +276,10 @@ def main(argv: list[str] | None = None) -> int:
                 bold_path = func_directory / bold_name
                 if not bold_path.exists():
                     raise FileNotFoundError(
-                        f"Missing preproc bold file for space '{args.space}': {bold_path}"
+                        "Missing preproc BOLD file derived from the confounds file. "
+                        f"Expected to find '{bold_name}' at {bold_path} based on "
+                        f"confounds file {confound_file}. "
+                        "This likely suggests the fMRIPrep outputs are not complete."
                     )
 
                 #If no mask is provided, we will grab the brain mask from
@@ -344,14 +368,14 @@ def main(argv: list[str] | None = None) -> int:
                     continue
 
                 #Figure out which volumes to keep based on confound files and user settings
-                #(such as FD/DVARS thresholds, sampling method, maxvols, etc.)
+                #(such as FD/DVARS thresholds, sampling method, fixedvols, etc.)
                 selections, volume_stats = utilities.build_volume_selection_from_confounds(
                     group_confound_files,
                     group_bold_paths,
                     fd_thres=args.fd_thres,
                     dvars_thresh=args.dvars_thresh,
                     sample_method=args.sample_method,
-                    maxvols=args.maxvols,
+                    fixedvols=args.fixedvols,
                 )
 
                 print("Merge inputs and selected volume counts:")
@@ -383,6 +407,24 @@ def main(argv: list[str] | None = None) -> int:
                     f"Selected {total_kept} total volume(s) across "
                     f"{len(group_bold_paths)} run(s)."
                 )
+                grouping_label = f"sub-{temp_subject}"
+                if temp_session:
+                    grouping_label += f" ses-{temp_session}"
+                if total_kept == 0:
+                    print(
+                        f"Processing will not occur for {grouping_label} "
+                        "because no volumes remained after confounds-based "
+                        "selection."
+                    )
+                    continue
+                if args.fixedvols is not None and total_kept < args.fixedvols:
+                    print(
+                        f"Processing will not occur for {grouping_label} "
+                        "because "
+                        f"only {total_kept} volume(s) remained after selection, "
+                        f"which is fewer than --fixedvols {args.fixedvols}."
+                    )
+                    continue
 
                 #Come up with the name for the merged intermediate file
                 reduced_name = group_reduced_names[0]
@@ -459,7 +501,7 @@ def main(argv: list[str] | None = None) -> int:
                     ),
                     "selection_params": {
                         "sample_method": args.sample_method or "first",
-                        "maxvols": args.maxvols,
+                        "fixedvols": args.fixedvols,
                     },
                     "fd_thres": args.fd_thres,
                     "dvars_thresh": args.dvars_thresh,
@@ -479,12 +521,18 @@ def main(argv: list[str] | None = None) -> int:
                 #Build and run the command that will be used to call dr2 for ##########
                 #this merged file. #####################################################
                 ########################################################################
+                dr2_tmp_base = utilities.resolve_tmp_dir(args.tmp_dir, output_path)
+                dr2_wrapper_tmp = Path(
+                    tempfile.mkdtemp(prefix="dr2star_wrapper_", dir=str(dr2_tmp_base))
+                )
                 cmd_template = build_cmd_template(
                     merged_output_path,
                     None,
                     mask_path,
                     output_path,
                     args,
+                    tmp_dir_override=dr2_wrapper_tmp,
+                    keep_dr2_tmp=True,
                 )
                 try:
                     result = subprocess.run(
@@ -493,9 +541,16 @@ def main(argv: list[str] | None = None) -> int:
                         cwd=output_anat_dir,
                     )
                 except FileNotFoundError:
+                    if not args.noclean:
+                        shutil.rmtree(dr2_wrapper_tmp, ignore_errors=True)
                     parser.error("'dr2' not found on PATH. Ensure it is installed or in PATH.")
 
+                reference_values = utilities.read_reference_values(dr2_wrapper_tmp)
                 if result.returncode != 0:
+                    if not args.noclean:
+                        shutil.rmtree(dr2_wrapper_tmp, ignore_errors=True)
+                    else:
+                        print(f"Preserved dr2 working files under: {dr2_wrapper_tmp}")
                     return result.returncode
                 print("dr2 complete.")
 
@@ -527,6 +582,8 @@ def main(argv: list[str] | None = None) -> int:
                     data["source_data"] = selection_metadata["source_data"]
                     data["mask_resampled"] = selection_metadata["mask_resampled"]
                     data["mask_file"] = selection_metadata["mask_file"]
+                    if reference_values is not None:
+                        data["reference_values"] = reference_values
                     if "mask_resample_map" in selection_metadata:
                         data["mask_resample_map"] = selection_metadata["mask_resample_map"]
                     write_json_with_inline_masks(sidecar_json, data)
@@ -534,6 +591,10 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"Removing merged intermediate: {merged_output_path.name}")
                     merged_output_path.unlink(missing_ok=True)
                     merged_json_path.unlink(missing_ok=True)
+                if not args.noclean:
+                    shutil.rmtree(dr2_wrapper_tmp, ignore_errors=True)
+                else:
+                    print(f"Preserved dr2 working files under: {dr2_wrapper_tmp}")
 
     #Ta-da, all done!
     return 0

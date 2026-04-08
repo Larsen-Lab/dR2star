@@ -107,13 +107,13 @@ Common fields include:
 - ``fd_thres`` and ``dvars_thresh``: motion and signal quality thresholds used for selection.
 - ``num_volumes_initial``: total number of volumes before censoring across the merged group.
 - ``num_volumes_post_censoring``: number of volumes remaining after FD/DVARS censoring.
-- ``num_volumes_analyzed``: number of volumes analyzed after any sampling/maxvols selection.
+- ``num_volumes_analyzed``: number of volumes analyzed after any sampling/fixedvols selection.
 - ``source_data``: list of BIDS URIs for the input BOLD files used in this
   output.
 - ``volume_selection``: a mapping from each input BOLD file to its
   ``temporal_mask`` (0/1 list indicating which volumes were kept).
 - ``selection_params``: the selection controls used (``sample_method`` and
-  ``maxvols``).
+  ``fixedvols``).
 - ``mask_file``: the final mask path used for normalization (BIDS URI).
 - ``mask_resampled``: whether the mask was resampled to match the merged BOLD.
 - ``mask_resample_map`` (when applicable): original and resampled mask paths.
