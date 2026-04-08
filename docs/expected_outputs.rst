@@ -115,6 +115,8 @@ Common fields include:
 - ``selection_params``: the selection controls used (``sample_method`` and
   ``fixedvols``).
 - ``mask_file``: the final mask path used for normalization (BIDS URI).
+- ``reference_values``: the per-volume reference-region values used during
+  normalization.
 - ``mask_resampled``: whether the mask was resampled to match the merged BOLD.
 - ``mask_resample_map`` (when applicable): original and resampled mask paths.
 
